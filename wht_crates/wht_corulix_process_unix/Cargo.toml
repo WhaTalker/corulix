@@ -1,0 +1,61 @@
+# WhaTalker Corulix -- wht_corulix_process_unix Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "wht_corulix_process_unix"
+description = "Narrow, audited Unix pre_exec/fchdir FFI boundary for pinning a child process's cwd to a WorkspaceRoot object identity (approved unsafe carve-out; mirrors Architecture Rule W's Windows precedent)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = ["crates-io"]
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["process"] }
+
+[target.'cfg(unix)'.dev-dependencies]
+# `fs` (open/fstat/OFlags/Mode, plus `io::fcntl_getfd`/`FdFlags` for this
+# crate's own structural CLOEXEC proof) is needed only by this crate's own
+# tests -- production code needs only `process::fchdir` (above).
+rustix = { workspace = true, features = ["fs"] }
+
+[dev-dependencies]
+# M09-P6: resolves and, on demand, builds the sibling
+# `wht_corulix_process_fixture` binary from this crate's own `tests/`
+# integration suite -- see the admission comment on this dependency in the
+# workspace root `Cargo.toml` and the identical pattern already established
+# in `wht_corulix_tooling`/`wht_corulix_formatter`/`wht_corulix_lsp`.
+# `wht_corulix_process_fixture` itself is intentionally NOT also listed
+# here as a path dependency -- it has no lib target (bin-only, `publish =
+# false`), and `escargot`'s own `manifest_path(...)` reaches that sibling
+# crate's `Cargo.toml` directly via `CARGO_MANIFEST_DIR`, independent of
+# Cargo's own dependency graph.
+escargot.workspace = true
+serde_json.workspace = true
+
+# This crate is the Unix counterpart to this workspace's equivalent
+# Windows Job Object FFI boundary crate's approved workspace-wide
+# `unsafe_code = "forbid"` exception (see that crate's own Cargo.toml/
+# lib.rs for the full `E0453`/`forbid`-cannot-be-locally-overridden
+# rationale, reproduced identically here): it defines
+# its own `[lints]` table (not `workspace = true`) so `unsafe_code` here is
+# `deny`, not `forbid`, which the single `#[allow(unsafe_code)]` on the
+# `cfg(unix)` `ffi` submodule below (see `src/lib.rs`) can locally
+# override. Every other lint workspace policy enforces is reproduced
+# verbatim so no other quality bar is relaxed by this carve-out.
+[lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"

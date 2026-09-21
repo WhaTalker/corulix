@@ -1,0 +1,39 @@
+# WhaTalker Corulix -- wht_corulix_mutation Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "wht_corulix_mutation"
+description = "Sole owner of the canonical governed mutation transaction (MutationBatch: prepare/stage/commit/verify/recover) for WhaTalker Corulix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = ["crates-io"]
+
+[dependencies]
+wht_corulix_core.workspace = true
+wht_corulix_workspace.workspace = true
+tokio.workspace = true
+
+[features]
+# Off by default and never enabled by a release build of this crate or of
+# `corulix` (the CLI binary depends on this crate only through the plain,
+# unfeatured `[dependencies]` entry above). Exists solely so another crate
+# in this Cargo workspace can enable it under its own `[dev-dependencies]`
+# to drive this crate's real, already-proven internal recovery-failure
+# mechanism (`FailureInjectionPoint`) from its *own* integration tests --
+# Phase 10-R1 §5's "internal seam for workspace tests, without expanding
+# public release surface". `wht_corulix_engine`'s `[dev-dependencies]` is
+# the one workspace consumer that enables it, for its real recovery-lock
+# `ChangeSession` E2E (`P10_RECOVERY_PUBLIC_TEST_SEAM_COUNT=0`: this
+# feature never ships active in the published/release artifact).
+test-support = []
+
+[lints]
+workspace = true

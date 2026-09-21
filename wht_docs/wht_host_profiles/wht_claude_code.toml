@@ -1,0 +1,163 @@
+# WhaTalker Corulix -- Host Enforcement Profile
+#
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# CANONICAL AUTHORITY. This file is the single source of truth for the
+# Claude Code host enforcement classification. Human-readable documentation
+# must reference this profile, never restate its values.
+
+profile_id = "wht-host-claude-code"
+host = "Claude Code"
+tested_version = "2.1.247"
+certified_host_version = "2.1.247"
+certification_date = "2026-08-27"
+installation_source = "vendor CLI installed under the operator account (`<home>/.local/bin/claude`)"
+
+# ---------------------------------------------------------------- discovery
+mcp_support = "yes"
+mcp_transport = "stdio"
+mcp_config_model = """
+MCP servers are declared as JSON. `--mcp-config <file>` loads a server set for \
+one invocation; `--strict-mcp-config` restricts the session to exactly that \
+set and ignores every ambient registration."""
+instruction_policy_model = """
+Natural-language instruction files (user-level and project-level CLAUDE.md) are \
+loaded into the model context. They are advisory only and carry no enforcement \
+weight."""
+tool_permission_model = """
+A settings JSON document carries `permissions.deny`, `permissions.allow` and \
+`permissions.defaultMode`. Denied tool names are removed from the tool schema \
+advertised to the model. Tools that are neither allowed nor denied are gated and \
+require approval, which is unavailable in non-interactive `-p` mode and is \
+therefore refused."""
+allow_deny_model = "explicit allow list and deny list; deny is evaluated as a union across settings sources and wins over any allow"
+hooks_events = "PreToolUse (and other lifecycle events) may run an external command; a non-zero exit blocks the tool call and the hook receives the full tool input on stdin"
+project_config_behavior = "project `.claude/settings.json` and `.claude/settings.local.json` are read, but cannot re-enable a tool denied by a higher-authority settings source"
+global_config_behavior = "user-level `<home>/.claude/settings.json` applies to every session; `--settings` layers an additional, non-mutating settings document for one invocation"
+
+bypass_surfaces = [
+  "direct file mutation via the Write / Edit / NotebookEdit tools",
+  "direct shell execution via the Bash tool",
+  "sub-agent delegation via the Task tool",
+  "network retrieval via WebFetch / WebSearch",
+  "alternate MCP servers registered outside the certified set",
+]
+
+# ----------------------------------------------------------- classification
+can_prevent_bypass = "YES"
+can_detect_bypass = "YES"
+can_only_advise = "NO"
+
+can_prevent_bypass_basis = """
+Technical, not advisory, proven by two independent mechanisms under positive \
+control. (1) Schema removal: with the certified deny list active the session's \
+advertised tool list omits Bash, Write, Edit, NotebookEdit and Task entirely, \
+while an otherwise identical unrestricted session advertises all of them. \
+(2) PreToolUse hook: with permissions deliberately set to the fully permissive \
+`bypassPermissions` mode -- the exact configuration under which the bypass \
+succeeds -- adding only the guard hook changed the outcome from marker written \
+to marker absent."""
+can_detect_bypass_basis = """
+The blocked attempt is recorded in two machine-readable places: the run result \
+document's `permission_denials` array names the attempted tool and its full \
+input, and the PreToolUse hook receives the same payload on stdin together with \
+the session id and transcript path, allowing it to be appended to an external \
+audit log."""
+
+# ------------------------------------------------------------- §12 downgrade
+host_config_downgrade_path = """
+NONE PROVEN for the certified configuration. A project-level \
+`.claude/settings.json` and `.claude/settings.local.json` that both requested \
+`defaultMode = "bypassPermissions"` and explicitly allowed Bash, Write and Edit \
+failed to re-enable those tools while the invocation-level certified settings \
+denied them; the operation remained blocked. The residual authority boundary is \
+the process launch itself: whoever spawns the `claude` process controls \
+`--settings`, so the certified deny list must include Bash to prevent the agent \
+from spawning an unconstrained child process."""
+
+# -------------------------------------------------------------- limitations
+known_limitations = [
+  "Enforcement is bound to the launched process. The certified deny list MUST include Bash; without it the agent can spawn a fresh `claude` process without `--settings` and inherit no restriction.",
+  "Under the deny list alone the blocked tool is absent from the schema, so no denial event is emitted and the model may narrate a success that did not occur. The PreToolUse hook is what supplies the audit record, and is therefore a required part of the certified configuration rather than an optional addition.",
+  "Instruction files (CLAUDE.md) are advisory only and must never be counted as enforcement.",
+  "`--strict-mcp-config` is required; without it ambient MCP registrations remain available as an alternate tool path.",
+  "Certified for 2.1.247 only. No claim is made for any other version.",
+]
+
+certification_scope = """
+Scoped to Claude Code 2.1.247 invoked non-interactively (`-p`) on Linux with the \
+certified configuration below. Interactive sessions are NOT covered: a human \
+operator can approve a gated tool call, and `--dangerously-skip-permissions` \
+remains available to whoever launches the process."""
+
+evidence_type = "real host binary, real end-to-end execution, positive control satisfied"
+evidence_reference = "CHANGELOG.md, section 'Phase 14 -- HOST ENFORCEMENT PROFILES', Claude Code evidence subsection"
+
+[positive_control]
+performed = true
+result = "PASS"
+description = """
+Identical prompt, identical version, identical fixture workspace. Unrestricted \
+configuration: the marker file was created. Certified configuration: the marker \
+file was absent and the attempt was recorded. The control therefore demonstrates \
+the operation was capable of occurring."""
+
+[required_configuration]
+summary = "invocation-level settings document denying every direct mutation path, allowing Corulix as the sole governed route, plus a PreToolUse guard hook"
+settings_file = """
+{
+  "permissions": {
+    "defaultMode": "default",
+    "deny": ["Bash", "Write", "Edit", "NotebookEdit", "Task", "WebFetch", "WebSearch"],
+    "allow": ["Read", "Glob", "Grep", "mcp__corulix"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|NotebookEdit",
+        "hooks": [{ "type": "command", "command": "<workspace>/.corulix/wht_guard.sh" }]
+      }
+    ]
+  }
+}"""
+guard_hook_script = """
+#!/usr/bin/env bash
+# <workspace>/.corulix/wht_guard.sh -- required part of the certified
+# configuration. Records the attempt, then fails closed. Exit status 2 is what
+# blocks the tool call; any other status does not.
+INPUT="$(cat)"
+printf '%s\\n' "$INPUT" >> "${CORULIX_HOST_AUDIT_LOG:?audit log path is required}"
+echo "Corulix governance: direct mutation is not permitted; use the Corulix MCP change session." >&2
+exit 2"""
+mcp_config_file = """
+{
+  "mcpServers": {
+    "corulix": {
+      "type": "stdio",
+      "command": "<corulix-bin>",
+      "args": ["mcp", "stdio", "--workspace", "<workspace>"]
+    }
+  }
+}"""
+launch = "claude -p '<task>' --settings <settings-file> --mcp-config <mcp-config-file> --strict-mcp-config"
+
+[guarantees]
+guaranteed = [
+  "the agent cannot mutate a file through the host's own edit tools",
+  "the agent cannot execute a shell command through the host's own shell tool",
+  "the agent cannot reach an MCP server outside the certified set",
+  "every blocked attempt is recorded with its full tool input",
+]
+not_guaranteed = [
+  "that a human operator will not launch the host without the certified settings",
+  "that an interactive session will refuse a gated call a human chooses to approve",
+  "that the model will not describe an action it did not perform",
+]
+
+[corulix_integration]
+mcp_tools_discovered = 14
+safe_tool_invocation = "PASS -- runtime_identity returned the real Corulix 0.1.0-alpha.2 identity document while every direct mutation tool was denied"
+host_trust_elevation = 0
+host_risk_override = 0
+host_gate_override = 0

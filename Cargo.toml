@@ -1,0 +1,202 @@
+# WhaTalker Corulix -- Workspace Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[workspace]
+resolver = "3"
+members = [
+    "wht_crates/wht_corulix_core",
+    "wht_crates/wht_corulix_workspace",
+    "wht_crates/wht_corulix_search",
+    "wht_crates/wht_corulix_index",
+    "wht_crates/wht_corulix_syntax",
+    "wht_crates/wht_corulix_config",
+    "wht_crates/wht_corulix_engine",
+    "wht_crates/wht_corulix_tooling",
+    "wht_crates/wht_corulix_process_win32",
+    "wht_crates/wht_corulix_process_unix",
+    "wht_crates/wht_corulix_process_fixture",
+    "wht_crates/wht_corulix_lsp",
+    "wht_crates/wht_corulix_mutation",
+    "wht_crates/wht_corulix_formatter",
+    "wht_crates/wht_corulix_mcp",
+    "wht_crates/wht_corulix_cli",
+]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "AGPL-3.0-only"
+license-file = "LICENSE"
+authors = ["WhaTalker Inc."]
+repository = "https://github.com/WhaTalker/corulix"
+homepage = "https://corulix.com"
+readme = "README.md"
+
+[workspace.dependencies]
+wht_corulix_core = { path = "wht_crates/wht_corulix_core", version = "1.0.0" }
+wht_corulix_workspace = { path = "wht_crates/wht_corulix_workspace", version = "1.0.0" }
+wht_corulix_search = { path = "wht_crates/wht_corulix_search", version = "1.0.0" }
+wht_corulix_index = { path = "wht_crates/wht_corulix_index", version = "1.0.0" }
+wht_corulix_syntax = { path = "wht_crates/wht_corulix_syntax", version = "1.0.0" }
+wht_corulix_config = { path = "wht_crates/wht_corulix_config", version = "1.0.0" }
+wht_corulix_engine = { path = "wht_crates/wht_corulix_engine", version = "1.0.0" }
+wht_corulix_tooling = { path = "wht_crates/wht_corulix_tooling", version = "1.0.0" }
+wht_corulix_process_win32 = { path = "wht_crates/wht_corulix_process_win32", version = "1.0.0" }
+wht_corulix_process_unix = { path = "wht_crates/wht_corulix_process_unix", version = "1.0.0" }
+wht_corulix_lsp = { path = "wht_crates/wht_corulix_lsp", version = "1.0.0" }
+wht_corulix_mutation = { path = "wht_crates/wht_corulix_mutation", version = "1.0.0" }
+wht_corulix_formatter = { path = "wht_crates/wht_corulix_formatter", version = "1.0.0" }
+wht_corulix_mcp = { path = "wht_crates/wht_corulix_mcp", version = "1.0.0" }
+
+clap = { version = "=4.6.6", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+jsonc-parser = { version = "=0.33.1", default-features = false }
+ignore = { version = "=0.4.33", default-features = false }
+grep-matcher = { version = "=0.1.9", default-features = false }
+grep-regex = { version = "=0.1.14", default-features = false }
+grep-searcher = { version = "=0.1.17", default-features = false }
+rustix = { version = "=1.1.4", default-features = false, features = ["std", "process"] }
+win32job = { version = "=2.0.3", default-features = false }
+# P17-W-R2 dependency admission: `windows-sys` at exactly `0.61.2` was
+# already present in `Cargo.lock` as a transitive dependency (of `errno`,
+# `mio`, `nu-ansi-term`, `socket2`, `winapi-util`) before this pin -- this
+# admits no new supply-chain surface, only makes an already-resolved,
+# already-`cargo deny`-clean dependency direct for
+# `wht_corulix_process_win32`'s narrow, approved Windows Job Object FFI
+# boundary (see that crate's `src/lib.rs` module docs). Only the three
+# Win32 API surfaces this boundary actually calls
+# (`Win32_Foundation`/`Win32_System_Diagnostics_ToolHelp`/
+# `Win32_System_Threading`) are enabled, per-crate, on top of this pin.
+windows-sys = { version = "=0.61.2", default-features = false }
+ureq = { version = "=3.4.0", default-features = false, features = ["rustls", "gzip"] }
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
+# P12-R2 dependency admission: pure-Rust, decompressor-only (never encodes),
+# MIT/Apache-2.0, no `unsafe`, no C toolchain/system library at build time --
+# same purity bar `flate2`'s own `rust_backend` feature above already holds
+# this workspace to. Needed because the managed GNU link runtime's upstream
+# source (Bootlin, `wht_corulix_tooling::managed_runtimes::GNU_LINK_RUNTIME_LINUX_X64`)
+# publishes its older stable releases as `.tar.bz2` only, not `.tar.gz`.
+bzip2-rs = { version = "=0.1.2", default-features = false }
+tar = { version = "=0.4.46", default-features = false }
+ls-types = { version = "=0.0.6" }
+# Dependency admission (Phase 10, ChangeSessionId): `uuid` was already
+# present in Cargo.lock as a transitive dependency of `rmcp` (the admitted
+# MCP SDK) before this pin -- this admits no new supply-chain surface, only
+# makes an already-resolved, already-`cargo deny`-clean dependency direct
+# for `wht_corulix_engine`'s CSPRNG-backed `ChangeSessionId` generation
+# (`getrandom`-backed `v4`, never a `std::collections::hash_map::RandomState`
+# process-local hash as `wht_corulix_workspace::WorkspaceIdentity` generation
+# uses -- that mechanism is explicitly documented as inadequate for a
+# security-relevant identifier). Pinned to the exact version already
+# resolved workspace-wide so this pin cannot itself move the lockfile.
+uuid = { version = "=1.24.1", default-features = false, features = ["v4"] }
+# Phase 13 dependency admission: `schemars` was already present in
+# `Cargo.lock` as a transitive dependency of `rmcp` (the admitted MCP SDK,
+# pulled in via its own `schemars` feature) at exactly this version before
+# this pin -- admits no new supply-chain surface, only makes an
+# already-resolved, already-`cargo deny`-clean dependency direct for
+# `wht_corulix_core`/`wht_corulix_engine` so their own public DTOs
+# (`ToolPlan`, `RuntimeIdentity`, `WorkspaceInfo`, etc.) can derive a real
+# `JsonSchema` for MCP `outputSchema` declarations, instead of
+# `wht_corulix_mcp` hand-maintaining a parallel, driftable shadow schema.
+# Pinned to the exact version already resolved workspace-wide so this pin
+# cannot itself move the lockfile.
+schemars = { version = "=1.2.2", default-features = false, features = ["derive", "std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# F1 dependency admission (`CORULIX_HOST_CONFIG_INTERFACE`): the operator-
+# facing `--host-config <FILE>` TOML file format needs a real TOML parser --
+# hand-rolling one for a security-relevant, host-authored trust-envelope
+# file would be exactly the kind of reinvented-parsing risk this workspace
+# otherwise avoids. `toml` is the same crate Cargo itself uses to parse
+# `Cargo.toml`, maintained by the same author as this workspace's already-
+# admitted `clap`/`toml_edit` lineage (Ed Page), dual MIT/Apache-2.0
+# licensed, pure Rust, no `unsafe`. Pinned to exactly `0.8.23`.
+# `default-features = false, features = ["parse"]` deliberately excludes the
+# crate's own `display` feature (and therefore `toml_write`), since this
+# workspace only ever *reads* a host-config file, never serializes one back
+# out. New transitive supply-chain surface this pin genuinely admits:
+# `toml_edit` (`=0.22.27`, its real parser/AST), `toml_datetime`,
+# `serde_spanned`, and `winnow` (the parser-combinator library
+# `toml_edit`'s `parse` feature pulls in) -- all MIT/Apache-2.0, pure Rust,
+# no `unsafe`. `indexmap` (`toml_edit`'s own map type) was already present
+# in `Cargo.lock` as a transitive dependency before this pin, so it admits
+# no new supply-chain surface of its own. `cargo deny check` re-verified
+# clean after this admission.
+toml = { version = "=0.8.23", default-features = false, features = ["parse"] }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "process", "time", "io-util", "sync"] }
+# Phase 13 item 2: test-only (`[dev-dependencies]` only, in
+# `wht_corulix_mcp`) -- the real cancellation token type
+# `rmcp::transport::streamable_http_server` itself uses for its own HTTP
+# server config, needed by this workspace's real conformance-suite HTTP
+# test harness. Never a production/release dependency: the release
+# `corulix` binary's dependency graph is unaffected.
+tokio-util = { version = "=0.7.19" }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Contract Validation Gate dependency admission: the owner's Enterprise
+# Contract Validation Gate mandate requires runtime JSON Schema validation
+# of every MCP tool's input/output against the exact schema `rmcp`'s own
+# `schema_for_input`/`schema_for_output` helpers already generate (Section
+# 12's `EXPOSED_OUTPUT_SCHEMA == RUNTIME_VALIDATION_SCHEMA_AUTHORITY`
+# invariant) -- `jsonschema` is the explicitly named preferred validator.
+# `default-features = false` with zero enabled features deliberately
+# excludes every optional extra this crate offers (`reqwest`/`resolve-http`/
+# `resolve-async`/`resolve-file` remote/async `$ref` resolution, `idna`,
+# `pyo3`/`magnus` language bindings, `arbitrary-precision`, `conformance`
+# test-suite tooling, `macros`) -- none of Corulix's schemas ever contain an
+# external `$ref`, since every schema is generated in-process from a Rust
+# type via `schemars`, so no resolver of any kind is needed. This keeps the
+# admission to pure, synchronous, in-process schema compilation/validation
+# only -- no HTTP client, no TLS stack, no async resolution, added to the
+# dependency graph. `cargo deny check` re-verified clean after this
+# admission (MIT licensed).
+jsonschema = { version = "=0.54.0", default-features = false }
+
+# Verified upstream release lines at package preparation time.
+rmcp = { version = "=3.0.1", default-features = false, features = ["server", "macros", "schemars", "transport-io"] }
+# Phase 13 item 2: test-only (`[dev-dependencies]` only, in
+# `wht_corulix_mcp`) -- binds `rmcp::transport::streamable_http_server`'s
+# real `StreamableHttpService` (a `tower_service::Service`) to a real TCP
+# listener for this workspace's real MCP-conformance-suite HTTP test
+# harness, mirroring `rmcp` 3.0.1's own test suite precedent exactly. Never
+# a production/release dependency.
+axum = { version = "=0.8.9", default-features = false, features = ["tokio", "http1"] }
+tree-sitter = "=0.26.11"
+tree-sitter-javascript = "=0.25.0"
+tree-sitter-typescript = "=0.23.2"
+tree-sitter-python = "=0.25.0"
+tree-sitter-rust = "=0.24.2"
+tree-sitter-go = "=0.25.0"
+
+# P17-W-R3-C2 dependency admission (WINDOWS_PROCESS_FIXTURE_PORTABILITY):
+# test-only (`[dev-dependencies]` only, in `wht_corulix_tooling`), MIT OR
+# Apache-2.0, no `unsafe`, no C toolchain/system library at build time.
+# `CARGO_BIN_EXE_<name>` is only ever set by Cargo for the bin-owning
+# package's own `tests/*.rs` integration targets (proven empirically in a
+# scratch workspace outside this repository, `SCRATCH_CARGO_BIN_EXE_EXPERIMENT`
+# in the P17-W-R3-C2 report) -- never for a `#[cfg(test)]` unit test module
+# inside `src/`, regardless of dependency direction. `wht_corulix_process_fixture`
+# is a separate `publish = false` crate, so its own `tests/*.rs` cannot help
+# `wht_corulix_tooling`'s `src/tests.rs` (and sibling `src/` unit-test
+# modules) locate the fixture binary. `escargot` both resolves that path
+# *and* guarantees the binary is actually built on demand (a bare path/dev
+# dependency does not force Cargo to build a sibling package's `[[bin]]`
+# target when only `cargo test -p wht_corulix_tooling` is run -- also
+# proven empirically), honoring `CARGO_TARGET_DIR`, the debug/release
+# profile, and the Windows `.exe` suffix without a hand-rolled
+# `current_exe()`/`CARGO_MANIFEST_DIR` path heuristic.
+escargot = { version = "=0.5.15", default-features = false }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"

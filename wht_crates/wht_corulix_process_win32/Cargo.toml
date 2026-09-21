@@ -1,0 +1,60 @@
+# WhaTalker Corulix -- wht_corulix_process_win32 Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "wht_corulix_process_win32"
+description = "Narrow, audited Win32/NT FFI boundary for pre-spawn Windows Job Object process containment and handle-relative filesystem authority (approved unsafe carve-out; see Architecture Rule W/Y)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = ["crates-io"]
+
+[target.'cfg(windows)'.dependencies]
+# M09-P9 admission: `Win32_Storage_FileSystem`/`Win32_System_IO`/
+# `Win32_Security` and the two `Wdk_*` features below add the
+# handle-relative filesystem-authority primitives
+# (`NtCreateFile`/`NtSetInformationFile`/`OBJECT_ATTRIBUTES`) this crate's
+# `ffi` submodule now also exposes, alongside its original P17-W-R2
+# process-containment surface. No dependency VERSION change: these are
+# additional Cargo features on the already-pinned, already-vetted
+# `windows-sys =0.61.2` (`workspace.dependencies`) -- confirmed present in
+# that exact vendored version before being enabled here.
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Threading",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_Security",
+    "Wdk_Foundation",
+    "Wdk_Storage_FileSystem",
+] }
+
+# This crate is the ONE approved exception to the workspace-wide
+# `unsafe_code = "forbid"` lint (P17-W-R2, `WINDOWS_FFI_SAFETY_BOUNDARY_DECISION`):
+# every other crate in this workspace inherits `workspace = true` and
+# therefore `forbid`, which a local `#[allow(unsafe_code)]` cannot override
+# (E0453) -- there is no way to carve out a narrow exception *inside* a
+# crate whose own lints are `forbid`. This crate instead defines its own
+# `[lints]` table (not `workspace = true`) so `unsafe_code` here is `deny`,
+# not `forbid`, which the single `#[allow(unsafe_code)]` on the
+# `cfg(windows)` `ffi` submodule below (see `src/lib.rs`) can locally
+# override. Every other lint workspace policy enforces is reproduced
+# verbatim so no other quality bar is relaxed by this carve-out.
+[lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"

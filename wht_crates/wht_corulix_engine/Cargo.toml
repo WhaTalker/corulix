@@ -1,0 +1,101 @@
+# WhaTalker Corulix -- wht_corulix_engine Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "wht_corulix_engine"
+description = "Application API and workspace orchestration for WhaTalker Corulix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = ["crates-io"]
+
+[dependencies]
+wht_corulix_core.workspace = true
+wht_corulix_workspace.workspace = true
+wht_corulix_index.workspace = true
+wht_corulix_syntax.workspace = true
+wht_corulix_config.workspace = true
+wht_corulix_mutation.workspace = true
+# Phase 10-R2: `ChangeSession::format_and_apply` is the one canonical,
+# session-owned format-write boundary (governed formatting +
+# content-state advancement as one inseparable product operation) -- this
+# promotes `wht_corulix_formatter` from a test-only dev-dependency to a
+# real production dependency of this crate. No cycle: `wht_corulix_formatter`
+# depends only on core/workspace/config/tooling/mutation/syntax, none of
+# which depend on `wht_corulix_engine` (confirmed via its own Cargo.toml).
+wht_corulix_formatter.workspace = true
+# P11: the diagnostics/lint/typecheck orchestration module (`src/diagnostics.rs`)
+# resolves managed `cargo`/`clippy-driver`/`cargo-clippy` and spawns them via
+# `wht_corulix_tooling::execute` directly -- the same real, controlled-process
+# authority `wht_corulix_formatter`'s own `invocation` module already uses for
+# `rustfmt`. This promotes `wht_corulix_tooling` from a test-only
+# dev-dependency (below `wht_corulix_lsp`'s own real-E2E use) to a real
+# production dependency of this crate. No cycle: `wht_corulix_tooling`
+# depends only on core/workspace/tokio/ureq/flate2/tar/serde (+
+# rustix/win32job per-platform), none of which depend on `wht_corulix_engine`
+# (confirmed via its own Cargo.toml).
+wht_corulix_tooling.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+# Root-cause observability instrumentation (managed LSP-provider
+# lifecycle): reuses this workspace's existing tracing convention -- every
+# diagnostic flows to `tracing`, which `wht_corulix_cli::main` wires to
+# stderr, never to `stdout`.
+tracing.workspace = true
+# P11: parses a real `cargo check`/`cargo clippy --message-format=json`
+# newline-delimited stream (`src/diagnostics.rs`) into typed
+# error/warning counts -- never a hand-rolled/regex parse of cargo's own
+# documented JSON message schema.
+serde.workspace = true
+serde_json.workspace = true
+# Phase 13: this crate's own new public capability DTOs (`SearchOutcome`,
+# `SemanticOutcome`, `FormatPreviewOutcome`, `ToolchainStatus`, ...) derive
+# `schemars::JsonSchema` directly, for the same reason as `wht_corulix_core`
+# (see that crate's own `Cargo.toml` note) -- `wht_corulix_mcp` never derives
+# these schemas itself, it only reuses the ones this crate and
+# `wht_corulix_core` already declare.
+schemars.workspace = true
+# Phase 13: `search` (`OperationIntent::TextSearch`) becomes a real, gated
+# production capability of this crate instead of dev-dependency-only test
+# wiring -- `ProviderCategory::TextSearch` is genuinely `Available` in
+# `ProviderSnapshot::current()` (see `providers.rs`), so the `search` MCP
+# tool's happy path is genuinely reachable. Architecture Rule B forbids
+# `wht_corulix_mcp` from depending on `wht_corulix_search` directly, so this
+# crate is the sole place its real result type is produced. No cycle:
+# `wht_corulix_search` does not depend on `wht_corulix_engine` (confirmed via
+# its own Cargo.toml, unchanged by this promotion).
+wht_corulix_search.workspace = true
+# Phase 13 item 3: `semantic` (`OperationIntent::Semantic*`) becomes a
+# real, gated production capability for `LanguageId::Rust` -- this crate
+# now genuinely spawns/drives a real, managed-first-then-`HOST_ONLY`
+# `wht_corulix_lsp::LspSession` (rust-analyzer) per Rust-scoped engine
+# instance and calls its real `definition`/`references`/`diagnostics`/
+# `rename_preview` operations, never re-implementing LSP transport/
+# JSON-RPC itself (Architecture Rule L remains `wht_corulix_lsp`'s alone).
+# Promoted from the prior phase's dev-dependency-only wiring now that
+# `ProviderSnapshot`'s per-language overlay is genuinely fed from a real
+# resolution attempt at call time (see `semantic.rs`) rather than the
+# compiled-in, always-unavailable `ProviderSnapshot::current()` alone. No
+# cycle: `wht_corulix_lsp` does not depend on `wht_corulix_engine`
+# (confirmed via its own Cargo.toml, unchanged by this promotion).
+wht_corulix_lsp.workspace = true
+
+[dev-dependencies]
+# Phase 10-R1's real recovery-lock `ChangeSession` E2E needs a genuinely
+# recovery-locked `MutationExecutor`, driven through that crate's own real
+# PREPARE->STAGE->COMMIT->VERIFY->RECOVER path (never a mocked
+# `is_locked()`). `test-support` is off by default (see that crate's
+# `Cargo.toml`) and is enabled here only for this crate's own test/dev
+# builds -- never for the release `corulix` binary, which depends on
+# `wht_corulix_mutation` only through the plain, unfeatured entry above.
+wht_corulix_mutation = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

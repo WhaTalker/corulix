@@ -1,0 +1,91 @@
+# WhaTalker Corulix -- wht_corulix_mcp Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "wht_corulix_mcp"
+description = "Thin MCP presentation layer for WhaTalker Corulix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = ["crates-io"]
+
+[dependencies]
+wht_corulix_core.workspace = true
+wht_corulix_engine.workspace = true
+rmcp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+jsonschema.workspace = true
+
+[dev-dependencies]
+# Phase 13's own real test suite builds a real `WorkspaceContext`/
+# `WorkspaceRoot` fixture directly (mirroring the exact
+# dev-dependency-only precedent `wht_corulix_engine`'s own Cargo.toml
+# already establishes for `wht_corulix_lsp`) -- Architecture Rule B governs
+# this crate's *production* dependency graph only; the release `corulix`
+# binary's `wht_corulix_mcp` dependency never gains this, since it is
+# `[dev-dependencies]`-only, exercised solely by `cargo test`.
+wht_corulix_workspace.workspace = true
+# Phase 13 item 4: this crate's own real, positive-path `format_preview`
+# E2E provisions the real managed `rustfmt` + `rust-semantic-runtime`
+# product manifests (via `wht_corulix_tooling::provisioning`, the same real
+# network/product-identity path `wht_corulix_formatter`'s own managed E2E
+# suite already uses) into a disposable, isolated root -- never into a
+# mocked provider, never bypassing `CorulixEngine`. See the `rmcp` entry
+# below (and CHANGELOG.md's Phase 13 Section L) for why this isolated
+# root is reached by spawning the real compiled binary as a real child
+# process with a redirected `XDG_DATA_HOME`, rather than by calling
+# `CorulixEngine::format_preview_at`/`semantic_at` directly. Dev-dependency
+# only, exactly like `wht_corulix_workspace` above: the release `corulix`
+# binary's production dependency graph is unaffected.
+wht_corulix_tooling.workspace = true
+wht_corulix_formatter.workspace = true
+# Phase 13 item 3: this crate's own real, positive-path `semantic` E2E
+# provisions the real managed `rust-analyzer` product manifest
+# (`wht_corulix_lsp::managed_toolchain::RUST_ANALYZER_LINUX_X64`) via the
+# same real provisioning path `wht_corulix_lsp`'s own managed lifecycle E2E
+# already uses. Dev-dependency only, exactly like `wht_corulix_formatter`
+# above: `wht_corulix_engine` (a real production dependency of this crate
+# already) is the only place production code ever drives a real
+# `wht_corulix_lsp::LspSession` (Architecture Rule B/L).
+wht_corulix_lsp.workspace = true
+# Phase 13 item 2: `tests/real_p13_mcp_conformance_http_harness_e2e.rs`
+# wraps the exact same, real, production `CorulixMcpServer` in a
+# test-only HTTP transport so the official
+# `@modelcontextprotocol/conformance` suite can run against it -- never a
+# reimplementation, never a stub. `rmcp`'s own `[dependencies]` entry above
+# stays release-scoped (`server`, `macros`, `schemars`, `transport-io`
+# only); this override adds `transport-streamable-http-server` for the
+# `[dev-dependencies]` graph only, unioned into `rmcp`'s feature set solely
+# for `cargo test` builds -- the release `corulix` binary (built without
+# compiling this crate's test targets) never gains it.
+# Real, positive-path `format_preview`/`semantic` E2E tests (see
+# `tests/real_p13_mcp_managed_provider_isolated_e2e.rs`) drive the real
+# compiled `corulix mcp stdio` binary as a real child process (via
+# `rmcp::transport::TokioChildProcess`, the exact same real client
+# transport `wht_corulix_cli`'s own Phase 13 lifecycle E2E already uses) so
+# that redirecting `XDG_DATA_HOME` for managed-root isolation is a plain,
+# safe `tokio::process::Command::env()` call scoped to the child process
+# only -- this workspace's `unsafe_code = "forbid"` lint applies to every
+# crate and every target, so no process-wide env mutation is ever an
+# option here. `client` + `transport-child-process` add the client-side
+# capability this scenario needs.
+rmcp = { version = "=3.0.1", default-features = false, features = [
+    "transport-streamable-http-server",
+    "client",
+    "transport-child-process",
+] }
+axum.workspace = true
+tokio-util.workspace = true
+
+[lints]
+workspace = true

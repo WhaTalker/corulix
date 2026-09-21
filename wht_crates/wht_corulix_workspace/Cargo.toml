@@ -1,0 +1,85 @@
+# WhaTalker Corulix -- wht_corulix_workspace Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "wht_corulix_workspace"
+description = "Sole owner of workspace canonicalization, path confinement, confined traversal, and root discovery for WhaTalker Corulix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = ["crates-io"]
+
+[dependencies]
+wht_corulix_core.workspace = true
+jsonc-parser.workspace = true
+tokio.workspace = true
+
+# M09-P1 dependency admission: `rustix` is already an exactly-pinned
+# workspace dependency (`=1.1.4`), used today by `wht_corulix_tooling`
+# (`[target.'cfg(unix)'.dependencies]`, same precedent followed here) with
+# features `["std", "process"]`. This adds only its already-vendored `fs`
+# feature (`open`/`fstat`/`OFlags`/`Mode`) on this crate -- a new dependency
+# EDGE on an already-vetted, already-pinned crate, never a new external
+# dependency, and gated to Unix only (mirroring `wht_corulix_tooling`'s own
+# split) so a Windows build never compiles it at all. Needed for
+# `WorkspaceRoot`'s pinned root directory-fd identity (M09 remediation P1):
+# closing the workspace-root object-identity TOCTOU requires opening the
+# root with `O_NOFOLLOW` and comparing `fstat` identity, which `std::fs`
+# provides no portable, safe-Rust way to do.
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
+# M09-P6 dependency admission: `wht_corulix_process_unix` is the narrow,
+# audited Unix pre_exec/fchdir FFI boundary this crate needs so
+# `WorkspaceRoot::bind_process_cwd` can configure a caller's
+# `std::process::Command` without this crate ever registering `unsafe`
+# `pre_exec` itself -- this crate's own `[lints] workspace = true` inherits
+# `unsafe_code = "forbid"`, which cannot be locally overridden (`E0453`),
+# so the actual unsafe registration must live in a crate whose own lints
+# only `deny` it. See that crate's own `src/lib.rs` module doc for the full
+# rationale (mirrors `wht_corulix_process_win32`'s identical precedent).
+wht_corulix_process_unix.workspace = true
+
+# M09-P9 dependency admission: `wht_corulix_process_win32` is the narrow,
+# audited Windows NT/Win32 filesystem-handle FFI boundary this crate needs
+# so `WorkspaceRoot`'s Windows handle model, and the Windows `PinnedParent`/
+# `PinnedTarget`/`PinnedFile` capability layer, can obtain real
+# handle-relative open/rename/delete authority without this crate ever
+# registering `unsafe` NT API calls itself -- this crate's own `[lints]
+# workspace = true` inherits `unsafe_code = "forbid"`, which cannot be
+# locally overridden (`E0453`). Mirrors this crate's own existing
+# `wht_corulix_process_unix` admission above exactly (same crate, now two
+# approved consumers -- see Architecture Rule Y.4's M09-P9 generalization
+# in `wht_scripts/wht_verify_architecture.py`); `wht_corulix_process_win32`
+# was previously consumed only by `wht_corulix_tooling` for Windows Job
+# Object process containment (P17-W-R2) and is now ALSO consumed here for
+# filesystem authority (M09-P9) -- the same crate, an additional approved
+# consumer, not a new dependency admission.
+[target.'cfg(windows)'.dependencies]
+wht_corulix_process_win32.workspace = true
+
+[dev-dependencies]
+# M09-P6: resolves and, on demand, builds the sibling
+# `wht_corulix_process_fixture` binary from this crate's own `tests/`
+# integration suite -- see the admission comment on this dependency in the
+# workspace root `Cargo.toml` and the identical pattern already established
+# in `wht_corulix_tooling`/`wht_corulix_formatter`/`wht_corulix_lsp`/
+# `wht_corulix_process_unix`.
+escargot.workspace = true
+serde_json.workspace = true
+
+# M09-P1: the same `cfg(test)`-adjacent, off-by-default seam pattern
+# `wht_corulix_mutation` already established for its own `precommit_hook` --
+# gates the construction-race test seam out of every release build.
+[features]
+test-support = []
+
+[lints]
+workspace = true

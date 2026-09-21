@@ -1,0 +1,47 @@
+# WhaTalker Corulix -- Supply-Chain Policy (cargo-deny)
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[graph]
+all-features = true
+
+[advisories]
+yanked = "deny"
+# Keep the RustSec advisory-db git clone outside the project source root.
+# CARGO_HOME is intentionally redirected under .corulix-rust/ for a fully
+# isolated, reproducible toolchain (see wht_scripts/wht_corulix_env.sh), so the
+# advisory-db's default location (under CARGO_HOME) would otherwise leave a
+# nested .git repository inside the Corulix source tree.
+db-path = "$HOME/.cache/whatalker/wht-corulix/cargo-deny-advisory-dbs"
+
+[licenses]
+confidence-threshold = 0.95
+allow = [
+    "AGPL-3.0-only",
+    "Apache-2.0",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    # webpki-roots (Mozilla's compiled-in root CA bundle, a transitive
+    # dependency of ureq's rustls TLS backend, admitted this phase for
+    # managed-toolchain artifact provisioning): a permissive, non-copyleft
+    # data license covering only the certificate bundle data, not code.
+    "CDLA-Permissive-2.0",
+    # foldhash (transitive dependency of hashbrown, pulled in by indexmap/
+    # referencing, themselves transitive dependencies of the Contract
+    # Validation Gate's `jsonschema` admission): OSI-approved, FSF Free/
+    # Libre, permissive, non-copyleft.
+    "Zlib",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

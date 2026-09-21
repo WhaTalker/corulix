@@ -1,0 +1,327 @@
+# WhaTalker Corulix -- Host Enforcement Profile
+#
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# CANONICAL AUTHORITY. This file is the single source of truth for the
+# certified VS Code-compatible MCP host classification. Human-readable
+# documentation must reference this profile, never restate its values.
+
+profile_id = "wht-host-vscode-copilot-chat"
+host = "Visual Studio Code with its built-in GitHub Copilot Chat agent surface"
+tested_version = "VS Code 1.123.0 (commit 6a44c352bd24569c417e530095901b649960f9f8, x64); GitHub Copilot Chat 0.51.0 (built-in, `/usr/share/code/resources/app/extensions/copilot`, package.json version field read directly)"
+certified_host_version = "1.123.0 + copilot-chat 0.51.0"
+certification_date = "2026-08-28"
+installation_source = "distribution package at `/usr/share/code`; Copilot Chat is a BUILT-IN extension shipped inside the VS Code installation, not a marketplace install, which is why it is absent from `code --list-extensions`"
+
+# This profile deliberately names one exact client. It does NOT generalize to
+# "VS Code" as a category, nor to any other MCP-capable editor extension.
+selection_rationale = """
+The installed marketplace extensions that speak MCP are wrappers over hosts \
+already certified separately by this phase (anthropic.claude-code, \
+sst-dev.opencode) or a vendor chat client (openai.chatgpt). The only \
+distinct, self-contained VS Code-native MCP host present is the VS Code core \
+chat/agent surface shipped with built-in GitHub Copilot Chat, which is what \
+this profile certifies. In VS Code 1.123.0 the MCP client, the language-model \
+tools service and the tool-approval layer all live in the VS Code CORE \
+workbench, not in the Copilot extension."""
+
+# ---------------------------------------------------------------- discovery
+mcp_support = "yes -- native to the VS Code core, not supplied by an extension"
+mcp_transport = "stdio"
+mcp_config_model = """
+Servers are declared in `mcp.json`: per-user in the profile directory, or \
+per-workspace at `<workspace>/.vscode/mcp.json`. The `code --add-mcp '<json>'` \
+CLI subcommand writes the user-profile document non-interactively. Server \
+startup is LAZY: a declared server is registered and given a log channel at \
+window load, but its process is not spawned until something actually needs \
+its tools. The real, non-interactive start command is \
+`workbench.mcp.startServer` with arguments \
+`('*', { autoTrustChanges: true, promptType: 'all-untrusted', \
+waitForLiveTools: true })`; calling it without arguments is a silent no-op \
+because the implementation filters servers by `definition.id === undefined`."""
+mcp_tool_namespacing = """
+Corulix tools are exposed to the host's tool registry under the MCP server's \
+IMPLEMENTATION name, not the `mcp.json` configuration key: the fourteen tools \
+appear as `mcp_rmcp_<tool>` (for example `mcp_rmcp_runtime_identity`), while \
+the configuration key is `corulix` and the log channel is \
+`mcpServer.mcp.config.ws0.corulix.log`. Any integration that matches on the \
+configuration key will not find them."""
+instruction_policy_model = "instruction and prompt files contribute advisory model context only"
+tool_permission_model = """
+Every tool invocation that originates from a chat request is routed through \
+the core confirmation service, which records the basis on which it was \
+allowed. Auto-approval is NOT grantable by configuration alone: \
+`chat.tools.global.autoApprove = true` in a settings document is inert until \
+an interactive modal ("Enable global auto approve?") is accepted, and the \
+acceptance is persisted in APPLICATION-scope storage under the key \
+`chat.tools.global.autoApprove.optIn`, which is not a settings key and lives \
+in `state.vscdb` rather than in any `settings.json`. The terminal path adds a \
+second, independent opt-in: `chat.tools.terminal.autoApprove.warningAccepted`, \
+also APPLICATION-scope storage, and it is deleted automatically whenever \
+`chat.tools.terminal.enableAutoApprove` stops being `true`."""
+allow_deny_model = """
+Settings-based, and -- importantly -- a subset is backed by enterprise device \
+management policy, which outranks user and workspace settings. Verified \
+present in the 1.123.0 workbench bundle, with the real declared scope and \
+policy name read from the shipped configuration schema: \
+`chat.tools.global.autoApprove` (default false, scope WINDOW, policy \
+ChatToolsAutoApprove); \
+`chat.tools.terminal.enableAutoApprove` (default true, policy \
+ChatToolsTerminalEnableAutoApprove); \
+`chat.tools.eligibleForAutoApproval` (default {}, policy \
+ChatToolsEligibleForAutoApproval, keyed by tool id); \
+`chat.agent.sandbox.enabled` (enum off/on/allowNetwork, default off, \
+restricted, policy ChatAgentSandboxEnabled); \
+`chat.agent.sandbox.allowUnsandboxedCommands` (default TRUE, restricted, \
+policy ChatAgentSandboxAllowUnsandboxedCommands); \
+`chat.agent.sandbox.allowAutoApprove` (default TRUE, restricted, policy \
+ChatAgentSandboxAllowAutoApprove); \
+`chat.agent.enabled` (policy ChatAgentMode); \
+`chat.extensionTools.enabled` (policy ChatAgentExtensionTools). \
+The code path also contains an explicit `_isAutoApprovePolicyRestricted()` \
+gate, so the policy layer is consulted before any auto-approval decision."""
+hooks_events = "a ChatHooks API proposal exists in the 1.123.0 bundle; not exercised"
+project_config_behavior = "`<workspace>/.vscode/settings.json` and `<workspace>/.vscode/mcp.json` are workspace-scoped and are editable by any agent holding an edit tool; `chat.agent.sandbox.*` carry `restricted: true`, so they are ignored from an untrusted workspace"
+global_config_behavior = "user profile `settings.json` and `mcp.json`; both are editable by any agent holding an edit tool unless an enterprise policy is in force. The auto-approval OPT-INS are NOT settings and cannot be granted by editing either document"
+
+bypass_surfaces = [
+  "the core `run_in_terminal` tool invoked from a chat request",
+  "the core terminal family (`send_to_terminal`, `run_task`, `create_and_run_task`)",
+  "Copilot Chat's own edit tools (`copilot_replaceString`, `copilot_insertEdit`, `copilot_createFile`, `copilot_applyPatch`) when Copilot Chat is active",
+  "rewriting workspace or user settings.json to request relaxed approval -- necessary but NOT sufficient, see tool_permission_model",
+  "adding an alternate server to mcp.json",
+]
+
+# ----------------------------------------------------------- classification
+# PARTIAL is never used here to describe incomplete evidence. These values
+# describe the capability of the configuration that was actually reached.
+can_prevent_bypass = "PARTIAL"
+can_detect_bypass = "YES"
+can_only_advise = "NO"
+
+can_prevent_bypass_basis = """
+PARTIAL, from executed behaviour in both directions on the same host, the \
+same fixture workspace and the same deterministic driver. \
+BLOCKED ROUTE, proven: a native bypass tool invocation cannot be \
+auto-approved by any configuration document. With \
+`chat.tools.global.autoApprove = true` present in the profile settings but the \
+APPLICATION-scope opt-in absent, a real tool invocation received no response \
+for the full 60-second bound while the host displayed a blocking modal \
+("Enable global auto approve?"); with the single storage key \
+`chat.tools.global.autoApprove.optIn` seeded and NOTHING else changed, the \
+identical invocation returned in 6 ms. An actor that can only write \
+`settings.json` -- user or workspace -- therefore cannot grant itself \
+auto-approval, and in an unattended session the invocation stops at a human \
+approval that never arrives. \
+NOT BLOCKED, also proven: once that one-time human opt-in exists, the native \
+bypass executes with no further gate. Under the certified-permissive \
+configuration the core `run_in_terminal` tool, driven from a real chat request \
+carrying a real `toolInvocationToken`, ran the probe command and rewrote the \
+marker file, and the host recorded the allowance as \
+`isConfirmed = { type: 2, id: "chat.tools.global.autoApprove" }`. \
+The classification is capped at PARTIAL and NOT raised to YES because the \
+blocked route is an interactive approval, not a refusal: a human present at \
+the prompt is the designed path and would allow the operation. It is not \
+lowered to NO because the approval gate is a real technical layer that was \
+reached, measured, and shown to be un-grantable by configuration alone."""
+can_detect_bypass_basis = """
+YES, from a real machine-readable, persistent artifact -- not model narrative. \
+The successful bypass did NOT occur silently. The host wrote a per-session \
+transcript to \
+`<user-data-dir>/User/workspaceStorage/<hash>/chatSessions/<session-id>.jsonl` \
+containing a `toolInvocationSerialized` record whose \
+`toolSpecificData.kind` is `terminal`, carrying the exact executed \
+`commandLine.original`, the `cwd`, the `terminalCommandId`, \
+`isComplete = true`, `source = { type: "internal", label: "Built-In" }`, and \
+`isConfirmed = { type: 2, id: "chat.tools.global.autoApprove" }`, which names \
+the precise mechanism that permitted it. The same file records the Corulix \
+invocation separately with `source.type = "mcp"`, `serverLabel = "rmcp"`, and \
+the full tool input and output. A second, independent signal exists in \
+`logs/<timestamp>/terminal.log`, where \
+`RunInTerminalTool#CommandLineAutoApproveAnalyzer` logs the parsed \
+sub-commands, the full command line, and explicitly that it "has no matching \
+auto approve entries" -- so the command is recorded together with the fact \
+that no rule matched it."""
+can_only_advise_basis = """
+NO. The technical layer was reached and measured in both directions, so the \
+host is not merely advisory. Instruction and prompt files remain advisory \
+model context and were deliberately not used as evidence for any claim in \
+this profile."""
+
+# ------------------------------------------------------------- §12 downgrade
+host_config_downgrade_path = """
+PARTIAL, established by EXECUTION with a real workspace document, not by \
+reading the schema. A `<workspace>/.vscode/settings.json` -- a document a \
+cloned repository can carry -- was written requesting every relaxation, while \
+the user profile requested the opposite, and the host's own configuration \
+inspection was read from inside the running window. \
+BLOCKED: `chat.tools.global.autoApprove` is NOT workspace-settable in this \
+build. The workspace value was discarded outright -- the host reported no \
+`workspaceValue` at all and the effective value stayed at the user profile's \
+`false`. Its declared `scope: 3` in the shipped schema is MACHINE, not WINDOW. \
+ALLOWED: three other keys were overridden by the workspace document and their \
+effective values flipped to the workspace's -- \
+`chat.tools.terminal.enableAutoApprove` (user false -> effective true), \
+`chat.agent.sandbox.enabled` (user "on" -> effective "off") and \
+`chat.agent.sandbox.allowUnsandboxedCommands` (user false -> effective true). \
+The `restricted: true` flag on the sandbox keys did not stop this because \
+workspace trust was not withheld in this fixture; withholding trust is what \
+makes that flag bite, and that condition was not separately exercised. \
+UNREACHABLE FROM ANY SETTINGS DOCUMENT: the two APPLICATION-scope approval \
+opt-ins, which is the barrier the PREVENT classification rests on. \
+Above all of this, every relevant key carries a `policy:` name and the code \
+path contains an explicit `_isAutoApprovePolicyRestricted()` gate, so \
+enterprise device management outranks user and workspace settings -- located \
+precisely in the shipped product, not in force here, not exercised, and \
+therefore a recommendation only."""
+
+# -------------------------------------------------------------- limitations
+known_limitations = [
+  "The chat request that carries the bypass could only be made to dispatch during window shutdown in this unattended, headless-operated environment; a chat request submitted programmatically to a live window stayed in the host's QUEUED state indefinitely. Every measurement that depends on a per-tool BLOCKED outcome observed under that shutdown flush was therefore DISCARDED, because a fully permissive, fully opted-in configuration produced the same instantaneous `Canceled` outcome as a restrictive one. Only outcomes that are attributable to a single changed variable are recorded here.",
+  "Consequently `chat.tools.eligibleForAutoApproval = { run_in_terminal: false }` was configured and confirmed to be in force by the host's own configuration inspection, but its effect on the invocation was NOT established. It is not claimed as a preventive control.",
+  "The `chat.agent.sandbox.enabled = \"on\"` runs never dispatched a tool invocation and are void as evidence. The Linux agent sandbox is real in 1.123.0 and its settings and policies were read from the shipped product, but its runtime behaviour was NOT exercised.",
+  "The enterprise device-management policy layer is real in 1.123.0, was located precisely, and is consulted by an explicit code path, but it was not in force and was not exercised. It is a required-configuration recommendation only.",
+  "The bypass was driven by a deterministic stub language-model provider and a chat participant that attempts the operation unconditionally. The host binary, its MCP client, its tool registry, its confirmation service and its terminal tool were all real and unmodified; the live GitHub Copilot model was not used, and no authenticated Copilot session existed. In this profile directory that is a deliberate methodology, not a gap: it removes model willingness as a confounder.",
+  "Certified for VS Code 1.123.0 with built-in Copilot Chat 0.51.0 on Linux only. This says nothing about any other VS Code version, any other MCP-capable extension, any other operating system, or 'VS Code' generally.",
+]
+
+certification_scope = """
+Scoped to VS Code 1.123.0 with built-in GitHub Copilot Chat 0.51.0 on Linux. \
+Within that scope this profile is certified by execution: Corulix MCP \
+discovery, the real invocation of a Corulix tool through the host, the \
+existence and reachability of the host's tool-approval layer, the fact that \
+auto-approval cannot be granted by configuration alone, the executability of \
+the native bypass once a human opt-in exists, and the persistent audit record \
+of that bypass. Explicitly NOT certified: the agent sandbox's runtime \
+behaviour, per-tool auto-approval ineligibility, the enterprise policy layer, \
+and any behaviour of the live GitHub Copilot model."""
+
+evidence_type = """
+real host binary, real shipped configuration schema, and real executed \
+behaviour. The minimum end-to-end sequence was completed: server declared, \
+server process started, fourteen tools discovered, a Corulix tool actually \
+invoked with a real structured result, a bypass operation actually executed \
+through a native host tool, and the resulting audit artifact read back from \
+disk. Control-surface scope, precedence and policy names were established by \
+reading the installed product's own configuration schema rather than by \
+inference."""
+evidence_reference = "CHANGELOG.md, section 'Phase 14 -- HOST ENFORCEMENT PROFILES', subsection 'K. VS Code residual closed'"
+
+[positive_control]
+performed = true
+result = "PASS"
+description = """
+Run with the control removed. Configuration: \
+`chat.tools.global.autoApprove = true`, \
+`chat.tools.terminal.enableAutoApprove = true`, plus the two APPLICATION-scope \
+opt-ins present. A chat participant registered by a throwaway probe extension \
+received a real chat request and, without consulting any model, invoked the \
+core `run_in_terminal` tool with the probe command and the request's own \
+`toolInvocationToken`. The tool returned a real terminal result after 1507 ms \
+and `<fixture>/WHT_P14_VSCODE_BYPASS_PROBE.txt` changed from \
+`WHT_P14_MARKER_ORIGINAL` to `WHT_P14_MARKER_BYPASSED_BY_HOST_NATIVE_TOOL`. \
+In the same request, and immediately before it, \
+`mcp_rmcp_runtime_identity` returned the real Corulix identity document. The \
+bypass is therefore executable on this host and any subsequent absence of the \
+marker change is a measurement, not an artifact of an inert probe."""
+
+[deterministic_forcing]
+mechanism = """
+Model willingness is removed entirely rather than argued around. A throwaway \
+probe extension, loaded with `--extensionDevelopmentPath` into an isolated \
+profile, contributes two things: a `languageModelChatProviders` vendor whose \
+provider is a deterministic stub that performs no network access and no \
+authentication, and a `chatParticipants` participant whose handler \
+unconditionally invokes the bypass tool with the request's real \
+`toolInvocationToken`. The chat request is submitted non-interactively through \
+`workbench.action.chat.open` with `modelSelector` pinned to the stub vendor. \
+Nothing in Corulix is modified and no host binary is patched."""
+why_required = """
+The live GitHub Copilot model was unavailable: with no authenticated Copilot \
+session the extension host rejects a chat request in `getModelForRequest` with \
+`Error: Language model unavailable` before any participant handler runs. \
+Asking a live model to attempt the bypass was therefore impossible, and would \
+in any case have made a refusal indistinguishable from prevention."""
+
+[evidence_executed]
+description = "what was actually run against the real product, and nothing beyond it"
+items = [
+  "`workbench.mcp.startServer` with its real argument shape started the declared Corulix server: `mcpServer.mcp.config.ws0.corulix.log` records `Starting server corulix`, `Connection state: Running`, and `Discovered 14 tools` -- executed, log read back from disk",
+  "the host's tool registry exposed exactly fourteen Corulix tools as `mcp_rmcp_*`, enumerated in full from inside the running extension host",
+  "`mcp_rmcp_runtime_identity` was invoked and returned the real identity document (version 0.1.0-alpha.2, rmcp 3.0.1, tree-sitter 0.26.11, protocol 2026-07-28) -- both from an extension-scoped invocation and from a chat-scoped invocation carrying a real `toolInvocationToken`",
+  "a chat participant handler received `request.toolInvocationToken` as a defined object naming a real `vscode-chat-session://local/<id>` session resource -- confirmed repeatedly across runs",
+  "the core `run_in_terminal` tool executed the probe command from that chat request and the marker file changed on disk (positive control)",
+  "the host refused the same tool outside a chat request with `Error: Invocation context must be provided for this tool`, so the extension-scoped path cannot reach the terminal tool at all -- deterministic and immediate",
+  "with `chat.tools.global.autoApprove = true` in settings but the storage opt-in absent, a real tool invocation received no response within 60 s and the host displayed a blocking modal; seeding only `chat.tools.global.autoApprove.optIn` made the identical invocation return in 6 ms",
+  "the executed bypass was read back from the host's own persistent chat-session transcript and from `terminal.log`, both naming the exact command line",
+  "the declared scope, default, `restricted` flag and enterprise policy name of every relevant chat/MCP setting were read from the shipped 1.123.0 configuration schema",
+]
+
+[required_configuration]
+summary = "Two layers. The settings layer is necessary but insufficient on its own; the enterprise policy layer is what makes the control outrank the actor it constrains, and it is RECOMMENDED rather than certified because it was not exercised here."
+workspace_mcp_json = """
+{
+  "servers": {
+    "corulix": {
+      "type": "stdio",
+      "command": "<corulix-bin>",
+      "args": ["mcp", "stdio", "--workspace", "<workspace>"]
+    }
+  }
+}"""
+certified_settings_example_note = "RECOMMENDED, NOT FULLY CERTIFIED. The `chat.tools.global.autoApprove` and `chat.tools.terminal.enableAutoApprove` entries are backed by executed behaviour. The `chat.tools.eligibleForAutoApproval` entry and the four `chat.agent.sandbox.*` entries are recommendations whose runtime effect was NOT established -- see known_limitations -- and three of them were shown to be overridable by a workspace document; see host_config_downgrade_path."
+certified_settings_example = """
+{
+  "chat.mcp.access": "all",
+  "chat.tools.global.autoApprove": false,
+  "chat.tools.terminal.enableAutoApprove": false,
+  "chat.tools.eligibleForAutoApproval": { "run_in_terminal": false },
+  "chat.agent.sandbox.enabled": "on",
+  "chat.agent.sandbox.allowUnsandboxedCommands": false,
+  "chat.agent.sandbox.allowAutoApprove": false,
+  "chat.agent.sandbox.autoApproveUnsandboxedCommands": false
+}"""
+operational_requirements = [
+  "never accept the 'Enable global auto approve?' modal, and never seed `chat.tools.global.autoApprove.optIn` -- that single one-time acceptance is what makes the native bypass execute unattended, as the positive control shows",
+  "keep `chat.tools.terminal.autoApprove.warningAccepted` unset",
+  "retain the per-session chat transcripts under `<user-data-dir>/User/workspaceStorage/<hash>/chatSessions/` -- they are the audit trail this profile's DETECT classification rests on",
+]
+enterprise_policy_recommended = [
+  "ChatToolsAutoApprove -> disable global tool auto-approval",
+  "ChatToolsTerminalEnableAutoApprove -> disable terminal auto-approval",
+  "ChatToolsEligibleForAutoApproval -> mark the terminal and edit tools ineligible",
+  "ChatAgentSandboxEnabled -> require the agent sandbox",
+  "ChatAgentSandboxAllowUnsandboxedCommands -> forbid unsandboxed commands",
+  "ChatAgentSandboxAllowAutoApprove -> forbid auto-approval inside the sandbox",
+  "ChatMCP -> constrain which MCP servers may be reached",
+]
+
+[guarantees]
+guaranteed = [
+  "Corulix can be registered as an MCP server for this host, per-user or per-workspace, including non-interactively from the command line",
+  "Corulix tools are really reachable through this host and really execute: fourteen tools discovered and `runtime_identity` invoked with a real structured result",
+  "a native bypass tool invocation cannot be auto-approved by editing any settings document, user or workspace",
+  "an executed bypass is recorded in a persistent, machine-readable transcript naming the exact command and the approval basis",
+]
+not_guaranteed = [
+  "that the operation is prevented once a human has accepted the one-time global auto-approve opt-in -- it demonstrably is not",
+  "that a human present at the approval prompt will refuse; the prompt is an approval path, not a refusal",
+  "any behaviour of the enterprise policy layer or of the Linux agent sandbox, neither of which was exercised",
+  "that per-tool auto-approval ineligibility blocks the invocation; this was not established",
+]
+
+[corulix_integration]
+mcp_tools_discovered = 14
+mcp_registration = "PASS -- server declared, recognized, process started, fourteen tools discovered"
+safe_tool_invocation = "PASS -- `mcp_rmcp_runtime_identity` invoked through the host and returned the real 0.1.0-alpha.2 identity document"
+host_trust_elevation = 0
+host_risk_override = 0
+host_gate_override = 0
+corulix_visible_instructions = """
+The host surfaced Corulix's own server instructions verbatim in the session \
+transcript: 14 canonical governed tools over a read-only-by-default \
+workspace, with mutating operations reachable only through the \
+begin_change -> submit_edit -> validate_change -> complete_change lifecycle \
+and no direct-write tool. This is Corulix's internal enforcement being \
+advertised to the host, not the host enforcing anything."""

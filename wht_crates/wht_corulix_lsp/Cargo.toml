@@ -1,0 +1,66 @@
+# WhaTalker Corulix -- wht_corulix_lsp Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "wht_corulix_lsp"
+description = "Sole owner of LSP transport/client protocol and semantic (definition/references/symbols/diagnostics/rename-preview) intelligence for WhaTalker Corulix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = ["crates-io"]
+
+[dependencies]
+wht_corulix_core.workspace = true
+wht_corulix_workspace.workspace = true
+wht_corulix_config.workspace = true
+wht_corulix_tooling.workspace = true
+# M03 TS/JS/TSX rename_preview AST-based anchor classification pass: reuses
+# wht_corulix_syntax's structural-only anchor-role classifier (Architecture
+# Rule C/L -- this crate never depends on Tree-sitter directly; syntax
+# classification stays wht_corulix_syntax's authority, semantic resolution
+# and the redirect decision stay this crate's own).
+wht_corulix_syntax.workspace = true
+ls-types.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+# Root-cause observability instrumentation (managed-provider lifecycle):
+# reuses this workspace's existing tracing convention -- every diagnostic
+# flows to `tracing`, which `wht_corulix_cli::main` wires to stderr, never
+# to `stdout` (reserved for the MCP JSON-RPC stream). See
+# `wht_corulix_mcp/src/lib.rs`'s own crate-level doc comment for the same
+# stated convention this crate now also follows.
+tracing.workspace = true
+
+[dev-dependencies]
+# Phase 7B-B2-C: combined B2 certification needs to exercise rustfmt
+# (owned by wht_corulix_formatter) alongside this crate's own LSP providers
+# in the same real, shared managed root -- test-only, one-directional (
+# wht_corulix_formatter has no dependency on wht_corulix_lsp, confirmed via
+# its own Cargo.toml, so this introduces no cycle).
+wht_corulix_formatter.workspace = true
+wht_corulix_mutation.workspace = true
+# Phase 7B-C-R2 §17: the identity-level symlink-confinement regression for
+# typescript-language-server/typescript-6-classic builds its own tiny,
+# in-memory malicious tarball (mirroring
+# wht_corulix_tooling's own real_provisioning_negative_matrix_e2e.rs
+# technique) -- both already pinned at the workspace level, test-only.
+tar.workspace = true
+flate2.workspace = true
+# P17-W-R3-R2 (LSP_TRANSPORT_WINDOWS_PORTABILITY): resolves and, on demand,
+# builds the sibling `wht_corulix_process_fixture` binary from a
+# `#[cfg(test)]` unit test module in `src/transport.rs` -- see the same
+# admission comment on this dependency in the workspace root `Cargo.toml`
+# and in `wht_corulix_tooling/Cargo.toml`. Not listed as a path dependency
+# for the same reason given there (bin-only, no lib target, `publish =
+# false`): `escargot`'s own `manifest_path(...)` reaches it directly.
+escargot.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,152 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  architecture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - run: python3 wht_scripts/wht_verify_architecture.py
+      - run: python3 wht_scripts/wht_verify_repository.py
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # Toolchain, profile, and components (rustfmt, clippy, rust-analyzer)
+      # are declared in rust-toolchain.toml and installed automatically by
+      # the runner's preinstalled rustup on first cargo/rustc invocation
+      # below -- no third-party action needed. `rust-analyzer` is required
+      # explicitly here (rather than relying solely on the lazy toolchain
+      # sync) because it is invoked directly by test subprocesses, not by
+      # `cargo` itself, so its availability must be confirmed before the
+      # workspace test suite runs.
+      - run: rustup show
+      - run: rustup component add rust-analyzer
+      - run: rust-analyzer --version
+      - run: test -f Cargo.lock
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - run: cargo test --workspace --all-features --locked
+      - run: cargo build --workspace --release --locked
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+
+  # Builds the real `corulix` release binary natively on all 5 runner
+  # platforms the private npm packaging pipeline ships:
+  # corulix-{linux,darwin}-{x64,arm64} + corulix-win32-x64. Every target
+  # below is the runner's own default host triple (no cross-compilation),
+  # so no third-party toolchain action is needed -- rustup already ships
+  # each target's compiler/linker on its native runner. Build-only: no
+  # publish, tag, or release step, and no registry credentials are used
+  # or required anywhere in this job.
+  multiplatform-build:
+    name: multiplatform-build (${{ matrix.platform_package }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform_package: corulix-linux-x64
+            runs-on: ubuntu-24.04
+            rust_target: x86_64-unknown-linux-gnu
+            binary_name: corulix
+          - platform_package: corulix-linux-arm64
+            runs-on: ubuntu-24.04-arm
+            rust_target: aarch64-unknown-linux-gnu
+            binary_name: corulix
+          - platform_package: corulix-darwin-x64
+            runs-on: macos-15-intel
+            rust_target: x86_64-apple-darwin
+            binary_name: corulix
+          - platform_package: corulix-darwin-arm64
+            runs-on: macos-15
+            rust_target: aarch64-apple-darwin
+            binary_name: corulix
+          - platform_package: corulix-win32-x64
+            runs-on: windows-2025
+            rust_target: x86_64-pc-windows-msvc
+            binary_name: corulix.exe
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Verify pinned release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="1.0.0"
+          actual="$(cat VERSION)"
+          if [ "$actual" != "$expected" ]; then
+            echo "VERSION file ($actual) does not match the pinned release version ($expected)" >&2
+            exit 1
+          fi
+      - name: Install Rust target
+        shell: bash
+        run: rustup target add ${{ matrix.rust_target }}
+      - name: Build release binary
+        shell: bash
+        run: cargo build --release --locked --target ${{ matrix.rust_target }} --package corulix
+      - name: Verify binary and generate provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin_path="target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }}"
+          if [ ! -f "$bin_path" ]; then
+            echo "expected binary not found at $bin_path" >&2
+            exit 1
+          fi
+          "$bin_path" --version
+          binary_sha256="$(sha256sum "$bin_path" | cut -d' ' -f1)"
+          binary_size="$(wc -c < "$bin_path" | tr -d ' ')"
+          rustc_version="$(rustc --version)"
+          cargo_version="$(cargo --version)"
+          build_timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p dist
+          cp "$bin_path" "dist/${{ matrix.binary_name }}"
+          cat > dist/provenance.json <<EOF
+          {
+            "schemaVersion": 1,
+            "repository": "WhaTalker/corulix",
+            "sourceCommit": "${{ github.sha }}",
+            "sourceVersion": "1.0.0",
+            "npmPlatformPackage": "${{ matrix.platform_package }}",
+            "rustTarget": "${{ matrix.rust_target }}",
+            "runnerOS": "${{ runner.os }}",
+            "runnerArch": "${{ runner.arch }}",
+            "binaryFilename": "${{ matrix.binary_name }}",
+            "binarySha256": "$binary_sha256",
+            "binarySize": $binary_size,
+            "rustcVersion": "$rustc_version",
+            "cargoVersion": "$cargo_version",
+            "buildMode": "release",
+            "buildTimestampUtc": "$build_timestamp"
+          }
+          EOF
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.platform_package }}-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  # Single deterministic required-status context: PASS only when
+  # repository integrity (SHA256SUMS.txt/PACKAGE_MANIFEST.txt, checked by
+  # the `architecture` job's wht_verify_repository.py) AND every one of
+  # the 5 platform builds above PASS (Darwin included, no
+  # continue-on-error anywhere). This exact job name is the required
+  # context bound by repository policy for PR merge gating.
+  corulix-multiplatform-build-gate:
+    name: corulix-multiplatform-build-gate
+    needs: [architecture, multiplatform-build]
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "Repository integrity and all 5 platform builds passed."

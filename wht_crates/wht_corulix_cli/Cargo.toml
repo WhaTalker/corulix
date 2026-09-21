@@ -1,0 +1,75 @@
+# WhaTalker Corulix -- corulix CLI Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "corulix"
+description = "Official corulix command-line binary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = ["crates-io"]
+
+[[bin]]
+name = "corulix"
+path = "src/main.rs"
+
+[dependencies]
+wht_corulix_core.workspace = true
+wht_corulix_engine.workspace = true
+wht_corulix_mcp.workspace = true
+wht_corulix_workspace.workspace = true
+# F1: this crate is the sole caller of `wht_corulix_config::load_host_config_file`
+# (the real `--host-config <FILE>` loader behind `corulix mcp stdio`) --
+# `wht_corulix_engine` already depends on `wht_corulix_config` for
+# `HostConfig` itself (`CorulixEngine::open_with_host_config`), but the CLI
+# is the layer that owns argument parsing/workspace-boundary checks, so it
+# needs this crate directly rather than routing a file-loading function
+# through Engine's own re-export indirection (that indirection exists for
+# `wht_corulix_mcp`, which Architecture Rule B/S forbids from depending on
+# `wht_corulix_config` at all -- no such restriction applies to this CLI
+# binary, which already depends on `wht_corulix_workspace` directly for the
+# same kind of reason).
+wht_corulix_config.workspace = true
+# Installation-Contract-V1: this crate's own `mcp stdio` bootstrap is the
+# one legitimate place `FIRST_RUN_RECONCILIATION` runs (`install_profile::ensure_bootstrapped`)
+# -- the same "this layer owns bootstrap, don't route it through Engine's
+# re-export indirection" reasoning `wht_corulix_config` above already
+# documents. `wht_corulix_engine` depends on this crate too, but does not
+# re-export its `provisioning` module, so a direct dependency here is
+# required, not merely convenient.
+wht_corulix_tooling.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+# Phase 13: the one real, genuine stdio discovery/invocation smoke test
+# (`initialize -> tools/list -> one safe read-only call -> clean shutdown`)
+# spawns the actual compiled `corulix` binary as a real child process and
+# speaks real MCP client protocol against it -- `rmcp`'s own
+# `TokioChildProcess` transport (`client`/`transport-child-process`
+# features) is exactly this SDK's genuine test harness for that scenario,
+# not a new supply-chain admission (both features belong to `rmcp`, already
+# admitted). Additive to (never replacing) the plain `server`-only feature
+# set `wht_corulix_mcp`'s own production dependency on `rmcp` uses --
+# Cargo unions feature sets for one shared dependency across a build, so
+# this widens only this crate's own dev/test build, never the release
+# `corulix` binary's production dependency surface.
+rmcp = { workspace = true, features = ["client", "transport-child-process"] }
+# `wht_corulix_tooling` (real `--host-config` E2E provisioning fixtures,
+# `tests/real_f1_host_config_e2e.rs`) is now a plain `[dependencies]` entry
+# above (Installation-Contract-V1's `FIRST_RUN_RECONCILIATION` needs it in
+# production), so no separate dev-dependency entry is needed here.
+
+[lints]
+workspace = true

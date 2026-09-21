@@ -1,0 +1,39 @@
+# WhaTalker Corulix -- wht_corulix_formatter Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "wht_corulix_formatter"
+description = "Sole owner of controlled, staging-only rustfmt formatter governance (Rust first) for WhaTalker Corulix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = ["crates-io"]
+
+[dependencies]
+wht_corulix_core.workspace = true
+wht_corulix_workspace.workspace = true
+wht_corulix_config.workspace = true
+wht_corulix_tooling.workspace = true
+wht_corulix_mutation.workspace = true
+wht_corulix_syntax.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+# P17-W-R3-R2 (FORMATTER_INVOCATION_WINDOWS_PORTABILITY): resolves and, on
+# demand, builds the sibling `wht_corulix_process_fixture` binary from a
+# `#[cfg(test)]` unit test module in `src/invocation.rs` -- see the same
+# admission comment on this dependency in the workspace root `Cargo.toml`
+# and in `wht_corulix_tooling/Cargo.toml`. Not listed as a path dependency
+# for the same reason given there (bin-only, no lib target, `publish =
+# false`): `escargot`'s own `manifest_path(...)` reaches it directly.
+escargot.workspace = true
+
+[lints]
+workspace = true

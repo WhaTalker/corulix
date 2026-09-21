@@ -1,0 +1,68 @@
+/target
+/.corulix
+/.corulix-rust
+*.tmp
+*.swp
+*.code-workspace
+.DS_Store
+.idea/
+.vscode/
+coverage/
+*.profraw
+*.lcov
+.env
+
+/.claude/
+/WhaTalker_Security_Scanner/
+/wht_reports/
+/release/
+
+# Private release tooling and local publication staging -- never part of
+# the public GitHub source tree (see wht_docs/wht_publication_scope.md).
+# Discovered missing from this file during the Controlled Three-Publisher
+# Release Pipeline pass's GitHub-publisher dry-run inspection: without
+# these two entries, WhtGitHubPublisher's own git-tracked publication-set
+# derivation (which uses this .gitignore as its authority, not
+# PACKAGE_MANIFEST.txt) would have included both directories' full
+# contents -- including the certified Linux/Windows release binaries and
+# private staging provenance -- in what it reported it "would track" for
+# a real publish.
+/WhaTalker_Corulix_Private_Release_Tooling/
+/wht_public_core/
+
+# Vendored crates.io dependency sources (M03 Rust semantic readiness fix).
+# Regenerated locally via `cargo vendor --locked`; never the source of
+# truth (Cargo.lock is) and too large to track in version control.
+# Matches both the workspace root's own vendor/ and any test fixture's
+# own nested vendor/ (e.g. wht_tests/fixtures/rust/*/vendor).
+vendor/
+
+# Benchmark/optimization/evidence scratch -- generated output, not source.
+/.corulix_benchmark/
+/.wht_phase2_evidence/
+/.wht_optimization_evidence/
+/markers/
+
+# Python tool caches.
+/.ruff_cache/
+/.pytest_cache/
+
+# Local-only offline vendoring override -- deliberately excluded from the
+# public source package (see README.md's Installation section: the public
+# package resolves dependencies via Cargo.lock/crates.io directly and does
+# NOT require vendor/; shipping this file without vendor/ would force a
+# public clone's build to fail looking for a directory source that was
+# never published).
+/.cargo/config.toml
+
+# Publication-manifest-excluded test/fixture material (see
+# PACKAGE_MANIFEST.txt reconciliation policy: SCRATCH/one-time-provisioning
+# test files and orphaned fixtures with zero references from any current
+# test source are excluded from the standard public source publication).
+/wht_crates/wht_corulix_lsp/tests/provision_rust_go_python_managed_providers.rs
+/wht_crates/wht_corulix_lsp/tests/scratch_import_specifier_probe.rs
+/wht_crates/wht_corulix_lsp/tests/scratch_rename_anchor_semantics_probe.rs
+/wht_crates/wht_corulix_syntax/tests/scratch_ast_grammar_shape_probe.rs
+/wht_tests/fixtures/python/sample_known_diagnostic.py
+/wht_tests/fixtures/rust/rust_semantic_dependency_smoke/
+/wht_tests/fixtures/rust/rust_semantic_smoke/

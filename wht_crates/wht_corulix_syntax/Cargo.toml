@@ -1,0 +1,36 @@
+# WhaTalker Corulix -- wht_corulix_syntax Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "wht_corulix_syntax"
+description = "Official Tree-sitter structural/syntax intelligence for WhaTalker Corulix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = ["crates-io"]
+
+[dependencies]
+wht_corulix_core.workspace = true
+tokio.workspace = true
+tree-sitter.workspace = true
+tree-sitter-javascript.workspace = true
+tree-sitter-typescript.workspace = true
+tree-sitter-python.workspace = true
+tree-sitter-rust.workspace = true
+tree-sitter-go.workspace = true
+
+[dev-dependencies]
+# Test-only: used solely by the Parse Optimization V2 dev microbench
+# (`dev_microbench_parse_v2_response_bytes`, `#[ignore]`d) to serialize
+# `ParseSummary` for byte-size measurement. Zero production footprint.
+serde_json.workspace = true
+
+[lints]
+workspace = true

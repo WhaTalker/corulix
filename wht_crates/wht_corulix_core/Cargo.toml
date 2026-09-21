@@ -1,0 +1,30 @@
+# WhaTalker Corulix -- wht_corulix_core Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "wht_corulix_core"
+description = "Protocol-agnostic domain contracts for WhaTalker Corulix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = ["crates-io"]
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+# Phase 13: every public DTO this crate exposes that an MCP tool's
+# `outputSchema` reuses derives a real `schemars::JsonSchema` here, rather
+# than `wht_corulix_mcp` hand-maintaining a parallel shadow schema that can
+# drift from the actual wire shape. See the workspace root `Cargo.toml`'s
+# own admission note for why this introduces no new supply-chain surface.
+schemars.workspace = true
+
+[lints]
+workspace = true

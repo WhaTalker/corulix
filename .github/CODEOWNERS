@@ -1,0 +1,8 @@
+* @whatalker-inc
+/.github/ @whatalker-inc
+/LICENSE @whatalker-inc
+/wht_docs/wht_trademarks.md @whatalker-inc
+/SECURITY.md @whatalker-inc
+/wht_docs/wht_cla_policy.md @whatalker-inc
+/Cargo.toml @whatalker-inc
+/rust-toolchain.toml @whatalker-inc

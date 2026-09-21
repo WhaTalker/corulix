@@ -1,0 +1,8 @@
+# WhaTalker Corulix -- Formatting Configuration
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+edition = "2024"
+max_width = 100
+use_field_init_shorthand = true
+newline_style = "Unix"

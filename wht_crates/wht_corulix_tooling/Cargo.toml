@@ -1,0 +1,57 @@
+# WhaTalker Corulix -- wht_corulix_tooling Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[package]
+name = "wht_corulix_tooling"
+description = "Sole owner of controlled external process construction and process-tree containment for WhaTalker Corulix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = ["crates-io"]
+
+[dependencies]
+wht_corulix_core.workspace = true
+wht_corulix_workspace.workspace = true
+tokio.workspace = true
+ureq.workspace = true
+flate2.workspace = true
+bzip2-rs.workspace = true
+tar.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Root-cause observability instrumentation (managed-process spawn):
+# reuses this workspace's existing tracing convention -- every diagnostic
+# flows to `tracing`, which `wht_corulix_cli::main` wires to stderr, never
+# to `stdout`.
+tracing.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+win32job.workspace = true
+wht_corulix_process_win32.workspace = true
+
+[dev-dependencies]
+# P17-W-R3-C2 (WINDOWS_PROCESS_FIXTURE_PORTABILITY): resolves and, on
+# demand, builds the sibling `wht_corulix_process_fixture` binary from a
+# `#[cfg(test)]` unit test module in `src/` -- see the admission comment on
+# this dependency in the workspace root `Cargo.toml`. Note:
+# `wht_corulix_process_fixture` itself is intentionally NOT also listed
+# here as a `[dev-dependencies]` path entry -- it has no library target
+# (bin-only, `publish = false`), and Cargo silently ignores (with a build
+# warning on every invocation) any dependency edge onto a package with no
+# lib target; `escargot`'s own `manifest_path(...)` reaches that sibling
+# crate's `Cargo.toml` directly via `CARGO_MANIFEST_DIR`, independent of
+# Cargo's own dependency graph, so no such edge is needed or wanted.
+escargot.workspace = true
+
+[lints]
+workspace = true

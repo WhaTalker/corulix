@@ -1,0 +1,52 @@
+# WhaTalker Corulix -- wht_corulix_process_fixture Crate Manifest
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# P17-W-R3-C2 (WINDOWS_PROCESS_FIXTURE_PORTABILITY): this crate exists solely
+# to give `wht_corulix_tooling`'s test suite (and any future Windows process
+# certification suite) one deterministic, cross-platform child-process
+# target, replacing hardcoded Unix-only fixture executables
+# (`/usr/bin/echo`, `/usr/bin/sleep`, `/bin/sh`, ...) that do not exist on
+# Windows. It is TEST-ONLY infrastructure:
+#
+#   * `publish = false` -- never released to crates.io, never part of
+#     `PACKAGE_MANIFEST.txt`/`SHA256SUMS.txt` release artifacts.
+#   * Not a Corulix-managed provider (Rule K / `wht_corulix_config::resolve_provider`
+#     is untouched by this crate's existence).
+#   * Not an MCP tool -- `wht_corulix_mcp`'s 14 typed tools are unaffected.
+#   * Not a product runtime dependency of any shipped binary.
+#
+# Consumed by `wht_corulix_tooling`'s `#[cfg(test)]` unit tests via
+# `escargot` (see `wht_corulix_tooling::fixture_support`), and by this
+# crate's own `tests/self_test.rs` integration tests, which additionally
+# dev-depend on `wht_corulix_tooling`/`wht_corulix_core` directly so one of
+# those self-tests can exercise the real production `execute()` path.
+
+[package]
+name = "wht_corulix_process_fixture"
+description = "Test-only, cross-platform deterministic child-process fixture for Corulix process-primitive tests (never published, never a managed provider)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+license-file.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+readme.workspace = true
+publish = false
+
+[[bin]]
+name = "wht_corulix_process_fixture"
+path = "src/main.rs"
+
+[dependencies]
+serde_json.workspace = true
+
+[dev-dependencies]
+wht_corulix_tooling.workspace = true
+wht_corulix_core.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

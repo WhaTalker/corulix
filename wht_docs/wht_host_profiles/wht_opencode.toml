@@ -1,0 +1,148 @@
+# WhaTalker Corulix -- Host Enforcement Profile
+#
+# Copyright (c) 2026 WhaTalker Inc.
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# CANONICAL AUTHORITY. This file is the single source of truth for the
+# OpenCode host enforcement classification. Human-readable documentation must
+# reference this profile, never restate its values.
+
+profile_id = "wht-host-opencode"
+host = "OpenCode"
+tested_version = "1.17.18"
+certified_host_version = "1.17.18"
+certification_date = "2026-08-27"
+installation_source = "vendor install under the operator account (`<home>/.opencode/bin/opencode`)"
+
+# ---------------------------------------------------------------- discovery
+mcp_support = "yes"
+mcp_transport = "stdio (local command)"
+mcp_config_model = """
+MCP servers are declared under the `mcp` key of an `opencode.json` / \
+`opencode.jsonc` document as `{ "type": "local", "command": [...] }`. \
+Discovered tools are exposed to the model as `<server>_<tool>`."""
+instruction_policy_model = "AGENTS.md and the `instructions` key supply advisory context only and carry no enforcement weight"
+tool_permission_model = """
+Two distinct and independent mechanisms. `tools.<name> = false` removes a tool \
+from the schema advertised to the model. `permission.<name> = "deny"` also \
+removes the tool from that schema, and the dispatcher rejects any call to it \
+with an explicit `Model tried to call unavailable tool` error. `"ask"` gates \
+the call; `--auto` auto-approves everything that is not explicitly denied."""
+allow_deny_model = """
+Per-tool `allow` / `ask` / `deny`, optionally refined by a map of glob patterns \
+to actions. CRITICAL: the permission table's key set is fixed by the published \
+schema (read, edit, glob, grep, list, bash, task, external_directory, \
+todowrite, question, webfetch, websearch, lsp, doom_loop, skill). There is no \
+`write` key; file writing is governed by `edit`."""
+hooks_events = "a plugin mechanism exists (`plugin` key, disabled by `--pure`); no tool-gating hook equivalent was exercised in this certification"
+project_config_behavior = "a project-level `<workspace>/opencode.json` is loaded AFTER the global configuration and can re-enable tools the global configuration denied"
+global_config_behavior = "`$XDG_CONFIG_HOME/opencode/opencode.json[c]` and `<home>/.opencode/opencode.json[c]` are loaded first in the precedence chain"
+
+bypass_surfaces = [
+  "direct file mutation via the write and edit tools",
+  "direct shell execution via the bash tool",
+  "sub-agent delegation via the task tool",
+  "a project-level opencode.json that re-enables denied tools",
+  "an unrecognized permission key that is silently ignored",
+]
+
+# ----------------------------------------------------------- classification
+can_prevent_bypass = "PARTIAL"
+can_detect_bypass = "PARTIAL"
+can_only_advise = "NO"
+
+can_prevent_bypass_basis = """
+PARTIAL, and the qualifier is the decisive part. The deny mechanism itself is \
+genuinely technical: with `permission = { edit = "deny", bash = "deny" }` the \
+tools bash, edit and write were all absent from the schema advertised to the \
+model, and a deterministic stub model that unconditionally attempted the write \
+was rejected by the dispatcher rather than merely declining. The same stub \
+under `permission.bash = "allow"` created the file, satisfying the positive \
+control. Enforcement is nevertheless PARTIAL because a lower-authority \
+project-level configuration defeats it -- see host_config_downgrade_path."""
+can_detect_bypass_basis = """
+PARTIAL, and the two halves differ. A call to a REMOVED tool is detected: it \
+surfaces as a structured `tool_use` event whose tool is `invalid` and whose \
+output names the attempted tool. The bypass that actually succeeded -- the \
+project-configuration downgrade -- produced NO denial signal of any kind; the \
+write completed normally and was indistinguishable from authorized work."""
+
+# ------------------------------------------------------------- §12 downgrade
+host_config_downgrade_path = """
+PROVEN AND UNMITIGATED. A project-level `<workspace>/opencode.json` containing \
+`permission = { edit = "allow", bash = "allow" }` fully re-enabled bash, edit \
+and write after the global configuration had denied them; the deterministic \
+stub then created the marker file. The host's own load order, visible in its \
+logs, places the project document after the global document in the precedence \
+chain. Because a repository can carry such a file, and because an agent with \
+any write capability can create one, the enforcement is defeatable by data \
+inside the workspace being examined. No managed or enterprise configuration \
+layer that outranks the project document was found in this version."""
+
+# -------------------------------------------------------------- limitations
+known_limitations = [
+  "The project-level configuration downgrade above is unmitigated in 1.17.18 and is the reason this profile is PARTIAL rather than YES.",
+  "Unrecognized permission keys are silently ignored rather than rejected -- configuration validation is fail-open. `permission.write = \"deny\"` is a no-op because the schema has no `write` key, yet it is accepted without warning and a reader will reasonably believe writes are denied. Verified empirically: with only `permission.write = \"deny\"` set, the write tool was still advertised and still wrote the file.",
+  "The `task` sub-agent tool remains available unless explicitly denied and was not separately exercised; the certified configuration denies it defensively.",
+  "`--auto` auto-approves everything not explicitly denied and must never be used with a configuration that relies on `ask`.",
+  "Certified for 1.17.18 only. No claim is made for any other version.",
+]
+
+certification_scope = """
+Scoped to OpenCode 1.17.18 invoked as `opencode run` on Linux with the \
+certified configuration, in a workspace that is TRUSTED not to contain its own \
+`opencode.json`. If workspace contents are untrusted, this host cannot be \
+relied on to prevent bypass."""
+
+evidence_type = "real host binary plus deterministic stub model provider, real end-to-end execution, positive control satisfied"
+evidence_reference = "CHANGELOG.md, section 'Phase 14 -- HOST ENFORCEMENT PROFILES', OpenCode evidence subsection"
+
+[positive_control]
+performed = true
+result = "PASS"
+description = """
+A deterministic stub OpenAI-compatible provider replaced the language model so \
+that the bypass was attempted unconditionally on every run, removing the \
+possibility that an absent marker merely reflected a model declining. The host \
+binary, its tool dispatch and its permission layer were all real. Permissive \
+configuration: the marker file was created and the tool reported exit 0. \
+Certified configuration: the tool was absent from the schema and the call was \
+rejected."""
+
+[required_configuration]
+summary = "global configuration denying every direct mutation path, with Corulix registered as the sole governed route; only valid schema keys are effective"
+opencode_json = """
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "corulix": {
+      "type": "local",
+      "enabled": true,
+      "command": ["<corulix-bin>", "mcp", "stdio", "--workspace", "<workspace>"]
+    }
+  },
+  "tools": { "bash": false, "edit": false, "write": false, "task": false },
+  "permission": { "bash": "deny", "edit": "deny", "task": "deny" }
+}"""
+launch = "opencode run --pure '<task>'"
+must_not_use = ["--auto"]
+operational_requirement = "the workspace must be verified not to contain its own opencode.json before the session starts; otherwise the configuration above can be overridden"
+
+[guarantees]
+guaranteed = [
+  "with no project-level opencode.json present, the agent cannot mutate a file or execute a shell command through the host's own tools",
+  "a call to a removed tool is rejected by the dispatcher and surfaced as a structured event",
+]
+not_guaranteed = [
+  "any enforcement at all when the workspace contains its own opencode.json",
+  "that an invalid permission key will be reported rather than silently ignored",
+  "detection of a bypass performed through a re-enabled tool",
+]
+
+[corulix_integration]
+mcp_tools_discovered = 14
+safe_tool_discovery = "PASS -- all 14 corulix_* tools were advertised to the model while bash, edit and write were denied and absent"
+safe_tool_invocation = "PASS -- corulix_runtime_identity was actually executed through this host and returned the real Corulix 0.1.0-alpha.2 identity document, in the same session in which bash, edit and write were denied"
+host_trust_elevation = 0
+host_risk_override = 0
+host_gate_override = 0
