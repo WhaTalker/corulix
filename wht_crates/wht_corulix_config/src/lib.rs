@@ -37,10 +37,18 @@
 mod hostfile;
 mod resolver;
 mod trust;
+mod workspace_config;
 
 pub use hostfile::{HostConfigLoadError, MAX_HOST_CONFIG_FILE_BYTES, load_host_config_file};
 pub use resolver::{ProviderResolution, resolve_provider};
 pub use trust::{
     EXTERNALLY_RESOLVABLE_CATEGORIES, EffectiveConfig, HostConfig, ManagedProvisioningPolicy,
     RepositoryHints, RequestOptions,
+};
+pub use workspace_config::{
+    BoundWorkspaceConfig, MAX_WORKSPACE_CONFIG_FILE_BYTES, RawWorkspaceRootOverride,
+    WORKSPACE_CONFIG_FILE_NAME, WORKSPACE_CONFIG_NAME, WORKSPACE_CONFIG_SCHEMA_VERSION,
+    WorkspaceConfig, WorkspaceConfigError, WorkspaceDefaults, WorkspaceRootOverrides,
+    bind_workspace_config_roots, load_workspace_config, load_workspace_config_with_catalog_mode,
+    parse_workspace_config, workspace_config_json_schema,
 };

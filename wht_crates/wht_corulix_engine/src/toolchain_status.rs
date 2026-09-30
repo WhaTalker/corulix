@@ -67,7 +67,7 @@ impl CorulixEngine {
     /// pre-existing F7 overlay was never applied here either).
     #[must_use]
     pub fn toolchain_status(&self) -> ToolchainStatus {
-        let effective = self.effective_config();
+        let effective = self.effective_config(None);
         let (typecheck_build, linter, test_runner) =
             crate::diagnostics_readiness::live_diagnostics_availability(None, &effective);
         let snapshot = ProviderSnapshot::current().with_diagnostics_resolution(

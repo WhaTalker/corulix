@@ -5,7 +5,7 @@
 [package]
 name = "wht_corulix_tooling"
 description = "Sole owner of controlled external process construction and process-tree containment for WhaTalker Corulix"
-version.workspace = true
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

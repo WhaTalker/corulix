@@ -29,16 +29,28 @@ use std::error::Error;
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(unix)]
+use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(unix)]
 use wht_corulix_config::{EffectiveConfig, HostConfig, RepositoryHints, RequestOptions};
+#[cfg(unix)]
 use wht_corulix_core::{CancellationToken, Position, WorkspaceRootId};
+#[cfg(unix)]
 use wht_corulix_lsp::{
     DefinitionResult, DiagnosticsResult, LspProviderProfile, LspSession, Readiness,
 };
 use wht_corulix_tooling::provisioning::{self, ManagedComponentState, uninstall};
+#[cfg(unix)]
 use wht_corulix_workspace::WorkspaceRoot;
 
+// P17-W corrective P5: gated per-item, not file-level -- this file is
+// genuinely mixed-platform (P3 census: 3 Unix-only tests + 1
+// platform-neutral test, `real_ts6_managed_dependency_aware_uninstall_e2e`,
+// which never references any of these five items), so a whole-file
+// `#![cfg(unix)]` would incorrectly drop the neutral test on Windows too.
+#[cfg(unix)]
 const READINESS_TIMEOUT: Duration = Duration::from_secs(60);
 const TLS_ID: &str = "typescript-language-server";
 const TS6_ID: &str = "typescript-6-classic";
@@ -86,6 +98,7 @@ fn temp_dir(label: &str) -> PathBuf {
     dir
 }
 
+#[cfg(unix)]
 fn temp_fixture_project(label: &str, ext: &str, config_name: &str) -> PathBuf {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -159,6 +172,7 @@ async fn ensure_managed_ts6_provisioned(root: &std::path::Path) -> bool {
     true
 }
 
+#[cfg(unix)]
 async fn resolve_ts6_managed(
     profile: &LspProviderProfile,
     workspace_root: &WorkspaceRoot,
@@ -180,6 +194,7 @@ async fn resolve_ts6_managed(
 /// `LspSession::transport`, the same escape hatch
 /// `real_pyright_managed_e2e.rs`'s own post-uninstall probe already uses),
 /// `documentSymbol`, and `diagnostics`.
+#[cfg(unix)]
 async fn run_full_vertical(
     language_label: &str,
     profile: LspProviderProfile,
@@ -451,6 +466,7 @@ async fn run_full_vertical(
 /// function every other passing assertion in this test -- definition,
 /// hover -- already goes through internally) rather than assuming the
 /// product's completion handling was at fault.
+#[cfg(unix)]
 fn wht_corulix_lsp_uri_for_test(path: &std::path::Path) -> String {
     let Some(uri) = wht_corulix_lsp::path_to_file_uri(path) else {
         unreachable!("fixture path must be representable as a file:// URI")

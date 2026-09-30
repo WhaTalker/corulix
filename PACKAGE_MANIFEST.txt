@@ -1,23 +1,24 @@
-# WhaTalker Corulix 1.0.0 standard public source-set inventory (path list, no checksums).
+# WhaTalker Corulix 1.1.0 standard public source-set inventory (path list, no checksums).
 # Cryptographic checksums for these files are in SHA256SUMS.txt.
 # Paths absent from this manifest are not part of the standard public source publication.
 
+./AGENTS.md
+./Cargo.lock
+./Cargo.toml
+./CHANGELOG.md
+./CONTRIBUTING.md
+./deny.toml
 ./.github/CODEOWNERS
 ./.github/workflows/ci.yml
 ./.gitignore
-./CHANGELOG.md
-./CONTRIBUTING.md
-./Cargo.lock
-./Cargo.toml
 ./LICENSE
 ./PACKAGE_MANIFEST.txt
 ./README.md
+./rustfmt.toml
+./rust-toolchain.toml
 ./SECURITY.md
 ./SHA256SUMS.txt
 ./VERSION
-./deny.toml
-./rust-toolchain.toml
-./rustfmt.toml
 ./wht_crates/wht_corulix_cli/Cargo.toml
 ./wht_crates/wht_corulix_cli/src/cli.rs
 ./wht_crates/wht_corulix_cli/src/help.rs
@@ -31,6 +32,7 @@
 ./wht_crates/wht_corulix_config/src/lib.rs
 ./wht_crates/wht_corulix_config/src/resolver.rs
 ./wht_crates/wht_corulix_config/src/trust.rs
+./wht_crates/wht_corulix_config/src/workspace_config.rs
 ./wht_crates/wht_corulix_core/Cargo.toml
 ./wht_crates/wht_corulix_core/src/cancellation.rs
 ./wht_crates/wht_corulix_core/src/diagnostics.rs
@@ -46,13 +48,14 @@
 ./wht_crates/wht_corulix_core/src/provider.rs
 ./wht_crates/wht_corulix_core/src/runtime.rs
 ./wht_crates/wht_corulix_core/src/session.rs
+./wht_crates/wht_corulix_core/src/tool_policy.rs
 ./wht_crates/wht_corulix_core/src/topology.rs
 ./wht_crates/wht_corulix_core/src/workspace.rs
 ./wht_crates/wht_corulix_engine/Cargo.toml
 ./wht_crates/wht_corulix_engine/src/begin_change.rs
 ./wht_crates/wht_corulix_engine/src/concurrency.rs
-./wht_crates/wht_corulix_engine/src/diagnostics.rs
 ./wht_crates/wht_corulix_engine/src/diagnostics_readiness.rs
+./wht_crates/wht_corulix_engine/src/diagnostics.rs
 ./wht_crates/wht_corulix_engine/src/format_preview.rs
 ./wht_crates/wht_corulix_engine/src/go_providers.rs
 ./wht_crates/wht_corulix_engine/src/go_testing.rs
@@ -78,16 +81,16 @@
 ./wht_crates/wht_corulix_engine/src/validate_change.rs
 ./wht_crates/wht_corulix_engine/tests/real_p10_dogfood_change_session_e2e.rs
 ./wht_crates/wht_corulix_engine/tests/real_p10_evidence_invalidation_revalidation_e2e.rs
-./wht_crates/wht_corulix_engine/tests/real_p10_recovery_lock_change_session_e2e.rs
 ./wht_crates/wht_corulix_engine/tests/real_p10r2_format_write_atomicity_negative_e2e.rs
+./wht_crates/wht_corulix_engine/tests/real_p10_recovery_lock_change_session_e2e.rs
 ./wht_crates/wht_corulix_engine/tests/real_p11_diagnostics_e2e.rs
 ./wht_crates/wht_corulix_engine/tests/real_p11_r1_trust_enforcement_e2e.rs
 ./wht_crates/wht_corulix_engine/tests/real_p12_trusted_test_execution_e2e.rs
 ./wht_crates/wht_corulix_engine/tests/real_p15_go_build_vet_test_e2e.rs
-./wht_crates/wht_corulix_engine/tests/real_p15_go_production_routing_e2e.rs
-./wht_crates/wht_corulix_engine/tests/real_p15_go_toolplan_coverage_e2e.rs
 ./wht_crates/wht_corulix_engine/tests/real_p15_gofmt_governance_e2e.rs
 ./wht_crates/wht_corulix_engine/tests/real_p15_gopls_active_scratch_lifecycle_e2e.rs
+./wht_crates/wht_corulix_engine/tests/real_p15_go_production_routing_e2e.rs
+./wht_crates/wht_corulix_engine/tests/real_p15_go_toolplan_coverage_e2e.rs
 ./wht_crates/wht_corulix_engine/tests/real_p15_managed_execution_cache_lifecycle_e2e.rs
 ./wht_crates/wht_corulix_engine/tests/real_p16_biome_zero_residual_uninstall_e2e.rs
 ./wht_crates/wht_corulix_engine/tests/real_p16_ts_family_full_governance_e2e.rs
@@ -140,7 +143,6 @@
 ./wht_crates/wht_corulix_lsp/src/uri.rs
 ./wht_crates/wht_corulix_lsp/tests/real_b2c_combined_certification_e2e.rs
 ./wht_crates/wht_corulix_lsp/tests/real_final_five_component_lifecycle_certification_e2e.rs
-./wht_crates/wht_corulix_lsp/tests/real_go_semantic_runtime_managed_invocation_e2e.rs
 ./wht_crates/wht_corulix_lsp/tests/real_gopls_e2e.rs
 ./wht_crates/wht_corulix_lsp/tests/real_gopls_managed_adversarial_e2e.rs
 ./wht_crates/wht_corulix_lsp/tests/real_gopls_managed_e2e.rs
@@ -151,6 +153,7 @@
 ./wht_crates/wht_corulix_lsp/tests/real_gopls_production_managed_provisioning_e2e.rs
 ./wht_crates/wht_corulix_lsp/tests/real_gopls_repeated_lifecycle_fd_retention_e2e.rs
 ./wht_crates/wht_corulix_lsp/tests/real_gopls_root_swap_e2e.rs
+./wht_crates/wht_corulix_lsp/tests/real_go_semantic_runtime_managed_invocation_e2e.rs
 ./wht_crates/wht_corulix_lsp/tests/real_isolated_multi_provider_certification_e2e.rs
 ./wht_crates/wht_corulix_lsp/tests/real_p15_go_semantic_authority_e2e.rs
 ./wht_crates/wht_corulix_lsp/tests/real_p7b_d_clean_host_combined_certification_e2e.rs
@@ -178,6 +181,7 @@
 ./wht_crates/wht_corulix_mcp/src/capability_notes.rs
 ./wht_crates/wht_corulix_mcp/src/contract_gate.rs
 ./wht_crates/wht_corulix_mcp/src/dto.rs
+./wht_crates/wht_corulix_mcp/src/instructions.rs
 ./wht_crates/wht_corulix_mcp/src/lib.rs
 ./wht_crates/wht_corulix_mcp/tests/real_f4_windows_live_format_gate_e2e.rs
 ./wht_crates/wht_corulix_mcp/tests/real_f6_passive_tools_stay_non_mutating_e2e.rs
@@ -229,12 +233,12 @@
 ./wht_crates/wht_corulix_tooling/src/platform.rs
 ./wht_crates/wht_corulix_tooling/src/platform/unix.rs
 ./wht_crates/wht_corulix_tooling/src/platform/windows.rs
-./wht_crates/wht_corulix_tooling/src/provisioning.rs
 ./wht_crates/wht_corulix_tooling/src/provisioning/full_uninstall.rs
 ./wht_crates/wht_corulix_tooling/src/provisioning/install_profile.rs
 ./wht_crates/wht_corulix_tooling/src/provisioning/lease.rs
 ./wht_crates/wht_corulix_tooling/src/provisioning/ownership.rs
 ./wht_crates/wht_corulix_tooling/src/provisioning/payload_verification_cache.rs
+./wht_crates/wht_corulix_tooling/src/provisioning.rs
 ./wht_crates/wht_corulix_tooling/src/provisioning/uninstall.rs
 ./wht_crates/wht_corulix_tooling/src/tests.rs
 ./wht_crates/wht_corulix_tooling/tests/real_managed_root_test_isolation_regression_e2e.rs
@@ -243,8 +247,8 @@
 ./wht_crates/wht_corulix_tooling/tests/real_p12_r2_gnu_link_runtime_lifecycle_e2e.rs
 ./wht_crates/wht_corulix_tooling/tests/real_p15_managed_scratch_zero_residual_e2e.rs
 ./wht_crates/wht_corulix_tooling/tests/real_p17w_r2_windows_job_object_containment_e2e.rs
-./wht_crates/wht_corulix_tooling/tests/real_provision_vs_full_uninstall_race_e2e.rs
 ./wht_crates/wht_corulix_tooling/tests/real_provisioning_negative_matrix_e2e.rs
+./wht_crates/wht_corulix_tooling/tests/real_provision_vs_full_uninstall_race_e2e.rs
 ./wht_crates/wht_corulix_workspace/Cargo.toml
 ./wht_crates/wht_corulix_workspace/src/capability.rs
 ./wht_crates/wht_corulix_workspace/src/capability_win32.rs
@@ -270,8 +274,9 @@
 ./wht_docs/wht_adr/wht_0009-python-lsp-provider.md
 ./wht_docs/wht_adr/wht_0010-typescript-javascript-provider-vertical-p16.md
 ./wht_docs/wht_adr/wht_0011-python-provider-vertical-p17.md
-./wht_docs/wht_architecture.md
+./wht_docs/wht_adr/wht_0012-corulix-1-1-0-workspace-config-and-tool-policy.md
 ./wht_docs/wht_architecture_boundaries.md
+./wht_docs/wht_architecture.md
 ./wht_docs/wht_cla_policy.md
 ./wht_docs/wht_clean_room.md
 ./wht_docs/wht_cli.md
@@ -299,11 +304,12 @@
 ./wht_docs/wht_threat_model.md
 ./wht_docs/wht_trademarks.md
 ./wht_docs/wht_upstream_baseline.md
+./wht_docs/wht_workspace_json_config_reference.md
 ./wht_scripts/wht_bootstrap.sh
 ./wht_scripts/wht_corulix_env.sh
-./wht_scripts/wht_verify.sh
 ./wht_scripts/wht_verify_architecture.py
 ./wht_scripts/wht_verify_repository.py
+./wht_scripts/wht_verify.sh
 ./wht_tests/fixtures/go/sample.go
 ./wht_tests/fixtures/javascript/sample.js
 ./wht_tests/fixtures/python/sample.py
@@ -312,3 +318,4 @@
 ./wht_tests/fixtures/typescript/rename_widget.tsx
 ./wht_tests/fixtures/typescript/sample.ts
 ./wht_tests/test_wht_verify_repository.py
+

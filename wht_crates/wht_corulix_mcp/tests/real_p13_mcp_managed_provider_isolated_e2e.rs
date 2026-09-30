@@ -337,36 +337,68 @@ fn semantic_fixture(label: &str) -> PathBuf {
 /// `rust-analyzer` product manifests into `root` -- idempotent, real
 /// network, no test-only manifest. `false` (never panics) on genuine
 /// failure.
+/// Host-native manifest selection (P17-W corrective P6, mirrors
+/// `ensure_real_managed_rustfmt_provisioned`'s own `#[cfg]`-gated-alias
+/// pattern above): a hardcoded `_LINUX_X64` manifest here always attempts
+/// to provision a Linux artifact when this test runs natively on Windows,
+/// which never verifies/executes as this host's own real toolchain -- the
+/// same defect class P5 already found and fixed in this exact function's
+/// sibling call site inside
+/// `real_corrupt_managed_rust_analyzer_ownership_surfaces_failure_stage_on_real_child_stderr`.
+/// Fixed once here, in the shared helper, rather than duplicated per
+/// caller.
+///
+/// P17-W corrective P7: gated `#[cfg(unix)]` -- both of its two callers
+/// were themselves gated Unix-only (both require a genuinely live
+/// managed rust-analyzer session, which `LspSession::spawn` unconditionally
+/// fails to establish on Windows), leaving this helper unreachable there.
+/// The P6 host-native manifest-selection fix above remains correct and
+/// unchanged; it simply becomes dormant on Windows under this gate.
+#[cfg(unix)]
 async fn ensure_real_managed_rust_analyzer_provisioned(root: &std::path::Path) -> bool {
-    use wht_corulix_tooling::managed_runtimes::RUST_SEMANTIC_RUNTIME_LINUX_X64;
+    #[cfg(not(target_os = "windows"))]
+    use wht_corulix_lsp::managed_toolchain::RUST_ANALYZER_LINUX_X64 as RUST_ANALYZER_HOST_NATIVE;
+    #[cfg(target_os = "windows")]
+    use wht_corulix_lsp::managed_toolchain::RUST_ANALYZER_WINDOWS_X64 as RUST_ANALYZER_HOST_NATIVE;
+    #[cfg(not(target_os = "windows"))]
+    use wht_corulix_tooling::managed_runtimes::RUST_SEMANTIC_RUNTIME_LINUX_X64 as RUST_SEMANTIC_RUNTIME_HOST_NATIVE;
+    #[cfg(target_os = "windows")]
+    use wht_corulix_tooling::managed_runtimes::RUST_SEMANTIC_RUNTIME_WINDOWS_X64 as RUST_SEMANTIC_RUNTIME_HOST_NATIVE;
     use wht_corulix_tooling::provisioning::{self, ManagedComponentState};
 
     let (runtime_state, _) =
-        provisioning::resolve_managed_component(root, &RUST_SEMANTIC_RUNTIME_LINUX_X64);
+        provisioning::resolve_managed_component(root, &RUST_SEMANTIC_RUNTIME_HOST_NATIVE);
     if runtime_state != ManagedComponentState::Available
-        && provisioning::provision(root, &RUST_SEMANTIC_RUNTIME_LINUX_X64)
+        && provisioning::provision(root, &RUST_SEMANTIC_RUNTIME_HOST_NATIVE)
             .await
             .is_err()
     {
         return false;
     }
-    let (ra_state, _) = provisioning::resolve_managed_component(
-        root,
-        &wht_corulix_lsp::managed_toolchain::RUST_ANALYZER_LINUX_X64,
-    );
+    let (ra_state, _) = provisioning::resolve_managed_component(root, &RUST_ANALYZER_HOST_NATIVE);
     if ra_state != ManagedComponentState::Available
-        && provisioning::provision(
-            root,
-            &wht_corulix_lsp::managed_toolchain::RUST_ANALYZER_LINUX_X64,
-        )
-        .await
-        .is_err()
+        && provisioning::provision(root, &RUST_ANALYZER_HOST_NATIVE)
+            .await
+            .is_err()
     {
         return false;
     }
     true
 }
 
+// Windows note (M09/D96, P17-W corrective P7): `#[cfg(unix)]`-only. This
+// test's entire proof (definition/references/diagnostics/rename_preview,
+// all against a genuinely live rust-analyzer session behind the real
+// spawned `corulix mcp stdio` child process) requires
+// `LspSession::spawn` to actually succeed inside that child -- which
+// unconditionally fails closed on Windows via
+// `ManagedProcess::spawn_with_workspace_root` (confirmed P4/P5/P6). The
+// Windows fail-closed contract itself is already proven, on Windows, by
+// this same file's `tests::p10_windows_mcp_fail_closed` module (e.g.
+// `windows_public_semantic_is_fail_closed_zero_spawn`) -- gating this
+// test does not remove that coverage, it removes only a duplicate,
+// currently-unreachable-on-Windows attempt to prove the live-success path.
+#[cfg(unix)]
 #[tokio::test]
 async fn real_semantic_definition_references_diagnostics_rename_preview_via_managed_rust_analyzer_e2e()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -544,6 +576,18 @@ async fn real_semantic_definition_references_diagnostics_rename_preview_via_mana
 // `LspSession`.
 // -----------------------------------------------------------------
 
+// Windows note (M09/D96, P17-W corrective P7): `#[cfg(unix)]`-only. This
+// test proves a *different* fail-closed contract (TOCTOU root-identity
+// mismatch after a live session was already Ready) than the one Windows
+// hits -- its own baseline call requires a genuinely live rust-analyzer
+// session to exist first, which `LspSession::spawn` unconditionally
+// fails to establish on Windows (confirmed P4/P5/P6). Rewriting this
+// test to instead expect the earlier, unrelated Windows spawn-fail-closed
+// stage would not prove root-swap detection at all -- it would merely
+// duplicate `tests::p10_windows_mcp_fail_closed::windows_public_semantic_is_fail_closed_zero_spawn`,
+// which already covers that contract on Windows. Gated per-test rather
+// than hiding this fact behind a changed assertion.
+#[cfg(unix)]
 #[tokio::test]
 async fn real_semantic_root_swap_after_ready_fails_closed_via_public_mcp_tool_e2e()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -670,7 +714,29 @@ async fn real_corrupt_managed_rust_analyzer_ownership_surfaces_failure_stage_on_
     // no real network acquisition needed, mirrors the exact technique
     // already proven at unit level in `wht_corulix_lsp::profile`'s own
     // `corrupt_ownership_record_emits_managed_ownership_validation_diagnostic`.
+    //
+    // P17-W corrective P5: host-native manifest selection, mirroring the
+    // established `#[cfg]`-gated-alias pattern this same file already uses
+    // in `ensure_real_managed_rustfmt_provisioned` above. A hardcoded
+    // `RUST_ANALYZER_LINUX_X64` here fabricates the corrupt fixture at the
+    // Linux install path, which a real, natively-spawned Windows
+    // `corulix mcp stdio` child process (below) never looks at -- it
+    // resolves `RUST_ANALYZER_WINDOWS_X64`'s own install path instead, so
+    // it saw no artifact at all rather than the corrupt one this test
+    // exists to fabricate, and the resulting resolution attempt diverged
+    // into the unrelated, unconditional Windows workspace-bound-spawn
+    // fail-closed path (`LspError::ProviderSpawnFailed` at
+    // `failure_stage="LSP_PROCESS_SPAWN"`) instead of this test's intended
+    // `MANAGED_OWNERSHIP_VALIDATION` stage.
+    // `MANAGED_OWNERSHIP_VALIDATION` itself (`wht_corulix_lsp::profile`) is
+    // pure on-disk ownership-record/state inspection with no process spawn
+    // involved, so it is not expected to differ across platforms once the
+    // fixture is placed where the real host-native resolution actually
+    // looks.
+    #[cfg(not(target_os = "windows"))]
     let manifest = &wht_corulix_lsp::managed_toolchain::RUST_ANALYZER_LINUX_X64;
+    #[cfg(target_os = "windows")]
+    let manifest = &wht_corulix_lsp::managed_toolchain::RUST_ANALYZER_WINDOWS_X64;
     let install_dir =
         wht_corulix_tooling::provisioning::component_install_dir(&managed_root, manifest);
     let binary_path = install_dir.join(manifest.source.binary_path_in_tarball);

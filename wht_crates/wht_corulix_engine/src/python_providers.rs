@@ -591,7 +591,7 @@ mod tests {
             "root".to_string(),
         );
         let engine = crate::CorulixEngine::open_with_trust(context, true);
-        let effective = engine.effective_config();
+        let effective = engine.effective_config(engine.root_id_for(&workspace_root));
         let cancellation = CancellationToken::new();
         let result = resolve_python_runtime(&effective, &workspace_root, &cancellation).await;
         assert!(

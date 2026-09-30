@@ -78,6 +78,9 @@ EXIT CODES
   6  --host-config could not be loaded (see `corulix help mcp stdio`)
   7  `setup` rejected a flag conflict or unrecognized group name
   8  `setup` reconciliation completed but left a component not ready
+  9  `config validate`/`config inspect` rejected the workspace config file
+  10 `instructions generate --check` found drift against a fresh render
+  11 `instructions generate --write` refused an unmanaged existing target
   1  any other internal failure
 
 Run `corulix help <COMMAND>` or `corulix <COMMAND> --help` for details on a \
@@ -239,6 +242,140 @@ EXAMPLES
   corulix mcp stdio --workspace ./project
   corulix mcp stdio --workspace-file ./Project.code-workspace
   corulix mcp stdio --workspace ./project --host-config /etc/corulix/host.toml";
+
+pub const CONFIG_LONG_ABOUT: &str = "\
+Inspect/validate the resolved workspace's own \
+`WhaTalker_Corulix_JSON_Config.json` (Corulix 1.1.0, ADR 0012).
+
+This is a workspace-scoped, non-privileged configuration file -- distinct \
+from the host/operator-only `--host-config` TOML file (see `corulix help mcp \
+stdio`) and from advisory `AGENTS.md`/`CLAUDE.md` instruction files, neither \
+of which this config can ever widen or elevate. It is read only from its own \
+canonical fixed location (beside a `.code-workspace` descriptor for a \
+multi-root workspace, or directly inside the single root) -- there is no \
+explicit `--workspace-config <FILE>` path in this release.
+
+An absent config file is valid: it reproduces Corulix 1.0.0's own exact \
+behavior (all 14 canonical MCP tools enabled, no provider-category \
+narrowing, no root overrides).
+
+See `corulix help config validate`, `corulix help config inspect`, and \
+`corulix help config schema` for the three subcommands.";
+
+pub const CONFIG_VALIDATE_LONG_ABOUT: &str = "\
+Load and fully validate the resolved workspace's own canonical \
+`WhaTalker_Corulix_JSON_Config.json`.
+
+Performs the exact same structural parse and semantic tool-policy \
+validation `corulix mcp stdio` itself applies at startup -- a configuration \
+that passes here is guaranteed not to later fail MCP construction for the \
+same reason, and vice versa. Opens no engine, starts no MCP server, \
+provisions nothing, and mutates nothing.
+
+An absent config file is reported as valid (Corulix 1.0.0's own unmodified \
+behavior), never as a failure.
+
+EXIT CODES
+  0  the workspace config is absent or fully valid
+  3  the workspace itself could not be resolved
+  9  the config file exists but is malformed, structurally invalid, or \
+fails semantic tool-policy validation
+
+EXAMPLES
+  corulix config validate --workspace ./project
+  corulix config validate --workspace-file ./Project.code-workspace";
+
+pub const CONFIG_INSPECT_LONG_ABOUT: &str = "\
+Report the resolved, effective workspace configuration: the effective MCP \
+tool set (canonical count, effective visible count, and the specific \
+disabled tool names), the workspace-wide default disabled provider \
+categories, and the number of configured root overrides.
+
+Pass --workspace-root to additionally report that one member root's own \
+effective disabled provider categories (the union of the workspace-wide \
+defaults and that root's own override, if any) -- tool policy itself \
+remains workspace-wide regardless of --workspace-root, since MCP `tools/ \
+list` is answered once per connection, before any root is selected.
+
+This is a local operator/diagnostic surface, not an MCP capability -- it \
+remains available even when `workspace_info` itself is disabled by the \
+active tool policy.
+
+EXIT CODES
+  0  the workspace config is absent or fully valid
+  3  the workspace itself (or --workspace-root selector) could not be resolved
+  9  the config file exists but is malformed, structurally invalid, or \
+fails semantic tool-policy validation
+
+EXAMPLES
+  corulix config inspect --workspace ./project
+  corulix config inspect --workspace-file ./Project.code-workspace --workspace-root api";
+
+pub const CONFIG_SCHEMA_LONG_ABOUT: &str = "\
+Emit the canonical JSON Schema for `WhaTalker_Corulix_JSON_Config.json`.
+
+Performs no workspace resolution and no filesystem I/O -- the schema is \
+static product data, generated from the exact same shared tool-catalog and \
+structural-shape authority the real loader validates against (the \
+`toolPolicy.disabledTools` enum is never a second, hand-maintained list). \
+The schema documents shape-level constraints only; semantic rules (root- \
+override binding, mutation-lifecycle/gate-visibility policy, the settled \
+empty-tool-catalog rule) remain `config validate`/`config inspect`'s own \
+responsibility and are not fully representable in JSON Schema alone.
+
+EXAMPLE
+  corulix config schema";
+
+pub const INSTRUCTIONS_LONG_ABOUT: &str = "\
+Generate this workspace's own advisory AGENTS.md/CLAUDE.md from its real, \
+effective Corulix MCP configuration.
+
+See `corulix help instructions generate` for the one subcommand.";
+
+pub const INSTRUCTIONS_GENERATE_LONG_ABOUT: &str = "\
+Render this workspace's effective Corulix MCP configuration as an advisory \
+AGENTS.md (or a CLAUDE.md compatibility bridge), and optionally write it to \
+its canonical location.
+
+The rendered content lists which of the 14 canonical MCP tools this \
+workspace's own effective tool policy currently leaves visible/hidden -- \
+nothing else. It is advisory documentation only: it carries no Corulix \
+enforcement weight and is never deserialized back into runtime authority by \
+any Corulix code path.
+
+OUTPUT MODES (mutually exclusive)
+  (default)  print the rendered content to stdout; no filesystem mutation
+  --write    write to the canonical target (beside a .code-workspace \
+descriptor for a multi-root workspace, or directly inside a single root)
+  --check    compare the canonical target's current content against a \
+fresh render, without writing anything
+
+--write SAFETY (no --force exists in 1.1.0)
+  An absent target is created. An existing target is replaced ONLY if it \
+already carries a valid Corulix-managed ownership marker for the same \
+--format. An existing target without that marker -- including any \
+hand-authored file -- is refused outright; reconcile it manually before \
+retrying. A file this command wrote itself may always be safely \
+regenerated.
+
+FORMATS
+  agents   the full AGENTS.md content (default)
+  claude   exactly a one-line \"@AGENTS.md\" import bridge (current \
+official Anthropic CLAUDE.md @path import support) -- there is no \
+standalone duplicated-content Claude mode in 1.1.0
+
+EXIT CODES
+  0   rendered/written successfully, or --check found no drift
+  3   the workspace itself could not be resolved
+  9   the workspace's own WhaTalker_Corulix_JSON_Config.json (if present) \
+failed validation
+  10  --check found drift between the canonical target and a fresh render
+  11  --write refused: the existing target has no Corulix-managed marker
+
+EXAMPLES
+  corulix instructions generate --workspace ./project
+  corulix instructions generate --workspace ./project --format claude --write
+  corulix instructions generate --workspace ./project --check";
 
 pub const SETUP_LONG_ABOUT: &str = "\
 Bootstrap or change this host's persisted managed-toolchain install profile, \

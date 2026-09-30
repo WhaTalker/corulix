@@ -663,6 +663,66 @@ fn confined_read_blocking(
     file.read_bytes(max_bytes)
 }
 
+/// Corulix 1.1.0 (ADR 0012): same contract as [`confined_read_blocking`],
+/// except a genuinely absent `relative` (the common, expected case for an
+/// optional workspace config file that was never authored) is reported as
+/// `Ok(None)` instead of an error -- every other failure (permission
+/// denied, wrong type, oversize, any ancestor resolution failure) still
+/// fails closed exactly like `confined_read_blocking`, never silently
+/// treated as "absent, use defaults". This is the primitive
+/// `wht_corulix_config::workspace_config` needs to implement its own
+/// `WorkspaceConfigError::NotPresent` vs `PathDenied` distinction.
+///
+/// Private blocking core behind the canonical [`confined_read_optional`]
+/// (`.await`).
+#[cfg(unix)]
+fn confined_read_optional_blocking(
+    root: &WorkspaceRoot,
+    relative: &Path,
+    max_bytes: u64,
+) -> CorulixResult<Option<Vec<u8>>> {
+    let target = crate::capability::PinnedTarget::resolve_existing(root, relative)?;
+    let Some(file) = target.open_raw_or_absent()? else {
+        return Ok(None);
+    };
+    let metadata = file
+        .metadata()
+        .map_err(|_| CorulixError::InvalidInput("file missing".into()))?;
+    if !metadata.is_file() {
+        return Err(CorulixError::InvalidInput(
+            "confined_read_optional target is not a regular file".into(),
+        ));
+    }
+    if metadata.len() > max_bytes {
+        return Err(CorulixError::FileTooLarge);
+    }
+    file.read_bytes(max_bytes).map(Some)
+}
+
+#[cfg(windows)]
+fn confined_read_optional_blocking(
+    root: &WorkspaceRoot,
+    relative: &Path,
+    max_bytes: u64,
+) -> CorulixResult<Option<Vec<u8>>> {
+    let target = crate::capability_win32::PinnedTarget::resolve_existing(root, relative)?;
+    let Some(file) = target.open_raw_or_absent()? else {
+        return Ok(None);
+    };
+    let metadata = file
+        .metadata()
+        .map_err(|_| CorulixError::InvalidInput("file missing".into()))?;
+    if !metadata.is_file() {
+        return Err(CorulixError::InvalidInput(
+            "confined_read_optional target is not a regular file".into(),
+        ));
+    }
+    if metadata.len() > max_bytes {
+        return Err(CorulixError::FileTooLarge);
+    }
+    file.read_bytes(max_bytes).map(Some)
+}
+
 /// Bounds for [`confined_walk`]: a maximum directory depth below the walk's
 /// starting point, and a maximum number of file entries returned.
 #[derive(Debug, Clone, Copy)]
@@ -780,6 +840,26 @@ pub async fn confined_read(
     tokio::task::spawn_blocking(move || confined_read_blocking(&root, &relative, max_bytes))
         .await
         .unwrap_or(Err(CorulixError::Internal))
+}
+
+/// Canonical async entry point for `confined_read_optional_blocking`. See
+/// [`resolve_confined`]'s docs for the blocking-boundary rationale.
+///
+/// Corulix 1.1.0 (ADR 0012): `wht_corulix_config::workspace_config` uses
+/// this (never `confined_read`) to read the optional
+/// `WhaTalker_Corulix_JSON_Config.json` file, so genuine absence
+/// (`Ok(None)`) and every other failure (`Err`, fail-closed) are never
+/// conflated.
+pub async fn confined_read_optional(
+    root: WorkspaceRoot,
+    relative: PathBuf,
+    max_bytes: u64,
+) -> CorulixResult<Option<Vec<u8>>> {
+    tokio::task::spawn_blocking(move || {
+        confined_read_optional_blocking(&root, &relative, max_bytes)
+    })
+    .await
+    .unwrap_or(Err(CorulixError::Internal))
 }
 
 /// Merges a confined, bounded file read with a caller-supplied blocking

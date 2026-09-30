@@ -256,6 +256,32 @@ impl PinnedTarget {
         })
     }
 
+    /// Same open as [`Self::open_raw`], except a genuinely absent leaf (NT
+    /// "not found" status) is reported as `Ok(None)` instead of being
+    /// collapsed into the same generic `PathDenied` every other failure
+    /// produces -- mirrors the Unix module's `open_raw_or_absent`, and
+    /// reuses this module's own `entry_exists`-style NT-status matching.
+    /// Corulix 1.1.0 (ADR 0012): sole caller is `confine.rs`'s
+    /// `confined_read_optional_blocking`.
+    pub(crate) fn open_raw_or_absent(&self) -> CorulixResult<Option<PinnedFile>> {
+        match wht_corulix_process_win32::open_relative(
+            &self.parent_handle,
+            &self.leaf,
+            RelativeOpenKind::ExistingFile,
+        ) {
+            Ok(handle) => Ok(Some(PinnedFile {
+                file: handle.into_file(),
+            })),
+            Err(wht_corulix_process_win32::FsAuthorityError::OpenRelativeFailed { status })
+                if status == STATUS_OBJECT_NAME_NOT_FOUND
+                    || status == STATUS_OBJECT_PATH_NOT_FOUND =>
+            {
+                Ok(None)
+            }
+            Err(_) => Err(CorulixError::PathDenied),
+        }
+    }
+
     /// Opens the bound entry for reading. Requires it be a regular file --
     /// `RelativeOpenKind::ExistingFile` already rejects a directory
     /// (`UnexpectedEntryType`) and any reparse point

@@ -27,7 +27,7 @@ Version line:         1.0.x
 
 ## Source/release authority
 
-Corulix 1.0.0 uses a no-Git release authority model. Local Git history, commit IDs and tags are not required source identity. The public source set and checksums, version/license metadata, validated binaries and explicit owner release authorization are the relevant release authorities.
+Corulix uses a no-Git release authority model, unchanged in 1.1.0. Local Git history, commit IDs and tags are not required source identity. The public source set and checksums, version/license metadata, validated binaries and explicit owner release authorization are the relevant release authorities.
 
 A public hosting platform may provide discovery, issues, downloads or mirrors, but hosting metadata does not override the content of an authorized release artifact.
 

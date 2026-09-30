@@ -1,6 +1,6 @@
 # Language Support Matrix
 
-This document describes the **current Corulix 1.0.0 language/provider surface**. Historical phase-status text is not current capability authority.
+This document describes the **current Corulix 1.1.0 language/provider surface** (unchanged from 1.0.0). Historical phase-status text is not current capability authority.
 
 Corulix supports these source families:
 
@@ -109,7 +109,7 @@ Language capability claims remain subject to the platform security model. On Win
 
 ## Capability terminology
 
-- **Supported** — part of the 1.0.0 product surface for the stated authority.
+- **Supported** — part of the current product surface for the stated authority.
 - **Conditional** — supported only when the project/provider/trust conditions explicitly described above are satisfied.
 - **Unavailable** — required authority/provider is not available; Corulix fails closed rather than inventing a fallback.
 

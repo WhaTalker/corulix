@@ -1,6 +1,6 @@
 # Release Process
 
-Source publication and an official versioned release are separate lifecycle stages. This document describes the **no-Git release authority model used by Corulix 1.0.0**.
+Source publication and an official versioned release are separate lifecycle stages. This document describes the **no-Git release authority model used by Corulix**, unchanged in 1.1.0.
 
 ## Release authority
 
@@ -51,7 +51,7 @@ A gate that did not execute against the exact release candidate must not be repr
 
 ## Publication-set boundary
 
-The standard 1.0.0 public source set excludes local/generated/private material such as:
+The standard public source set excludes local/generated/private material such as:
 
 ```text
 .corulix-rust/

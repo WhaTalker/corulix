@@ -88,3 +88,67 @@ async fn real_stdio_discovery_and_safe_invocation_smoke() -> Result<(), Box<dyn 
     let _ = std::fs::remove_dir_all(&workspace);
     Ok(())
 }
+
+/// Corulix 1.1.0 (ADR 0012, Phase M): proves `corulix mcp stdio` actually
+/// applies the workspace's own `WhaTalker_Corulix_JSON_Config.json` tool
+/// policy end to end -- not merely that `config validate`/`inspect` can
+/// parse it (already covered elsewhere), but that a REAL spawned MCP
+/// server's REAL `tools/list` response reflects it. This test exists
+/// because a real Phase M audit found `run_mcp_stdio` was never actually
+/// wired to `load_workspace_config`/`with_workspace_config`/
+/// `with_tool_policy` -- the server always started with the default,
+/// unconfigured, all-14-enabled policy regardless of a present config
+/// file. Fixed; this is the regression test for that fix.
+#[tokio::test]
+async fn real_stdio_server_applies_workspace_tool_policy() -> Result<(), Box<dyn std::error::Error>>
+{
+    let workspace = temp_workspace("policy-applied");
+    std::fs::write(
+        workspace.join("WhaTalker_Corulix_JSON_Config.json"),
+        r#"{
+            "configName": "WhaTalker Corulix JSON Config",
+            "schemaVersion": 1,
+            "toolPolicy": { "disabledTools": ["semantic", "format_preview"] }
+        }"#,
+    )?;
+    let binary = corulix_binary();
+
+    let command = Command::new(&binary).configure(|cmd| {
+        cmd.arg("mcp")
+            .arg("stdio")
+            .arg("--workspace")
+            .arg(&workspace);
+    });
+    let transport = TokioChildProcess::new(command)?;
+    let client_info = ClientInfo::new(
+        ClientCapabilities::default(),
+        Implementation::from_build_env(),
+    );
+    let service = client_info.serve(transport).await?;
+
+    let tools = service.list_all_tools().await?;
+    assert_eq!(
+        tools.len(),
+        12,
+        "the workspace's own toolPolicy disables 2 of 14 canonical tools; \
+         the real spawned server's tools/list must reflect exactly that"
+    );
+    assert!(!tools.iter().any(|tool| tool.name == "semantic"));
+    assert!(!tools.iter().any(|tool| tool.name == "format_preview"));
+    assert!(tools.iter().any(|tool| tool.name == "runtime_identity"));
+    assert!(tools.iter().any(|tool| tool.name == "begin_change"));
+
+    // A direct call to a policy-disabled tool must also be rejected by the
+    // real server, not merely absent from discovery.
+    let disabled_call_result = service
+        .call_tool(CallToolRequestParams::new("semantic"))
+        .await;
+    assert!(
+        disabled_call_result.is_err(),
+        "calling a workspace-policy-disabled tool directly must fail, not silently succeed"
+    );
+
+    service.cancel().await?;
+    let _ = std::fs::remove_dir_all(&workspace);
+    Ok(())
+}

@@ -1,6 +1,6 @@
 # MCP Compatibility
 
-## 1.0.0 baseline
+## MCP tool surface baseline (established 1.0.0, unchanged in 1.1.0)
 
 ```text
 SDK:                rmcp 3.0.1
@@ -16,11 +16,11 @@ MCP implementation details are confined to `wht_corulix_mcp` and delegated into 
 - `stdin` carries MCP protocol input.
 - `stdout` is reserved for MCP protocol output once the server starts.
 - `stderr` carries diagnostics and operational logging.
-- Network MCP transports are not part of the 1.0.0 baseline.
+- Network MCP transports are not part of the baseline (stdio only, unchanged in 1.1.0).
 
 ## Public tool surface
 
-Corulix 1.0.0 exposes exactly:
+Corulix exposes exactly (unchanged since 1.0.0):
 
 | Tool | Category |
 | --- | --- |
@@ -74,4 +74,4 @@ begin_change -> submit_edit -> validate_change -> complete_change
 
 ## Compatibility changes
 
-Changes to public tool names or schemas are versioned product changes. The 1.0.0 publication must not add, remove, or silently rename any of the 14 tools above.
+Changes to public tool names or schemas are versioned product changes. No publication may add, remove, or silently rename any of the 14 tools above.

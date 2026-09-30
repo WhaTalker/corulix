@@ -91,6 +91,18 @@ pub enum Command {
         #[command(subcommand)]
         command: McpCommand,
     },
+    /// Inspect/validate the workspace's own WhaTalker_Corulix_JSON_Config.json
+    #[command(long_about = help::CONFIG_LONG_ABOUT)]
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
+    /// Generate this workspace's own advisory AGENTS.md/CLAUDE.md
+    #[command(long_about = help::INSTRUCTIONS_LONG_ABOUT)]
+    Instructions {
+        #[command(subcommand)]
+        command: InstructionsCommand,
+    },
     /// Bootstrap or change this host's persisted managed-toolchain install profile
     #[command(long_about = help::SETUP_LONG_ABOUT)]
     Setup {
@@ -159,6 +171,84 @@ pub enum WorkspaceCommand {
         #[command(flatten)]
         root: RootSelector,
     },
+}
+
+/// Corulix 1.1.0 (ADR 0012): `corulix config`'s own subcommands. None of
+/// these open a `CorulixEngine`, start MCP, or mutate the workspace --
+/// `validate`/`inspect` perform read-only workspace-config resolution;
+/// `schema` performs no I/O and needs no workspace at all.
+#[derive(Subcommand, Debug)]
+pub enum ConfigCommand {
+    /// Load and fully validate the resolved workspace's own canonical
+    /// `WhaTalker_Corulix_JSON_Config.json` (structural + semantic tool
+    /// policy rules), reporting `WORKSPACE_CONFIG_STATUS=OK|FAILED` and,
+    /// on success, a machine-readable summary. An absent file is valid --
+    /// it reproduces Corulix 1.0.0's own unmodified behavior.
+    #[command(long_about = help::CONFIG_VALIDATE_LONG_ABOUT)]
+    Validate {
+        #[command(flatten)]
+        workspace: WorkspaceSelection,
+    },
+    /// Report the resolved, effective workspace configuration: the
+    /// effective MCP tool set, workspace-wide default disabled provider
+    /// categories, and (with `--workspace-root`) that one root's own
+    /// effective disabled categories.
+    #[command(long_about = help::CONFIG_INSPECT_LONG_ABOUT)]
+    Inspect {
+        #[command(flatten)]
+        workspace: WorkspaceSelection,
+        #[command(flatten)]
+        root: RootSelector,
+    },
+    /// Emit the canonical JSON Schema for `WhaTalker_Corulix_JSON_Config.json`.
+    /// Performs no workspace resolution or filesystem I/O -- the schema is
+    /// static, sourced from the same shared authority the loader itself
+    /// validates against.
+    #[command(long_about = help::CONFIG_SCHEMA_LONG_ABOUT)]
+    Schema,
+}
+
+/// Corulix 1.1.0 (ADR 0012, Phase I): `corulix instructions`'s own
+/// subcommand -- `generate` is the only one, kept as a subcommand rather
+/// than a bare `corulix instructions [FLAGS]` so a future addition never
+/// needs a breaking CLI restructure.
+#[derive(Subcommand, Debug)]
+pub enum InstructionsCommand {
+    /// Render this workspace's effective Corulix MCP configuration as an
+    /// advisory `AGENTS.md` (or `CLAUDE.md` compatibility bridge). Prints
+    /// to stdout unless `--write` or `--check` is given; the two are
+    /// mutually exclusive.
+    #[command(long_about = help::INSTRUCTIONS_GENERATE_LONG_ABOUT)]
+    Generate {
+        #[command(flatten)]
+        workspace: WorkspaceSelection,
+        /// Output format: `agents` (default) or `claude` (a one-line
+        /// `@AGENTS.md` import bridge only -- there is no standalone
+        /// duplicated-content Claude mode in 1.1.0).
+        #[arg(long, value_enum, default_value = "agents", value_name = "FORMAT")]
+        format: InstructionsFormatArg,
+        /// Write the rendered output to its canonical target location
+        /// (beside a `.code-workspace` descriptor for a multi-root
+        /// workspace, or directly inside a single root). May create an
+        /// absent target or replace only a target already carrying a
+        /// valid Corulix-managed ownership marker for the same format --
+        /// an existing unmanaged/hand-authored file is refused, never
+        /// overwritten. There is no `--force`. Conflicts with `--check`.
+        #[arg(long, conflicts_with = "check")]
+        write: bool,
+        /// Drift-check only: compare the canonical target's current
+        /// content against what would be freshly rendered now, without
+        /// writing anything. Conflicts with `--write`.
+        #[arg(long, conflicts_with = "write")]
+        check: bool,
+    },
+}
+
+/// `corulix instructions generate --format <FORMAT>`'s recognized values.
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstructionsFormatArg {
+    Agents,
+    Claude,
 }
 
 #[derive(Subcommand, Debug)]
@@ -437,6 +527,106 @@ mod tests {
         assert_help_or_version(&["corulix", "setup", "--help"], ErrorKind::DisplayHelp);
     }
 
+    #[test]
+    fn config_validate_syntax_parses() {
+        assert!(Cli::try_parse_from(["corulix", "config", "validate"]).is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "corulix",
+                "config",
+                "validate",
+                "--workspace",
+                "/srv/project"
+            ])
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn config_inspect_syntax_parses_with_and_without_root_selector() {
+        assert!(Cli::try_parse_from(["corulix", "config", "inspect"]).is_ok());
+        assert!(
+            Cli::try_parse_from([
+                "corulix",
+                "config",
+                "inspect",
+                "--workspace-file",
+                "./Project.code-workspace",
+                "--workspace-root",
+                "api",
+            ])
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn config_schema_syntax_parses_and_accepts_no_workspace_flags() {
+        assert!(Cli::try_parse_from(["corulix", "config", "schema"]).is_ok());
+    }
+
+    #[test]
+    fn config_help_flags_exit_zero_equivalent() {
+        assert_help_or_version(&["corulix", "config", "--help"], ErrorKind::DisplayHelp);
+        assert_help_or_version(
+            &["corulix", "config", "validate", "--help"],
+            ErrorKind::DisplayHelp,
+        );
+        assert_help_or_version(
+            &["corulix", "config", "inspect", "--help"],
+            ErrorKind::DisplayHelp,
+        );
+        assert_help_or_version(
+            &["corulix", "config", "schema", "--help"],
+            ErrorKind::DisplayHelp,
+        );
+    }
+
+    #[test]
+    fn instructions_generate_syntax_parses_with_defaults() {
+        assert!(Cli::try_parse_from(["corulix", "instructions", "generate"]).is_ok());
+    }
+
+    #[test]
+    fn instructions_generate_accepts_format_write_and_check_independently() {
+        assert!(
+            Cli::try_parse_from(["corulix", "instructions", "generate", "--format", "claude"])
+                .is_ok()
+        );
+        assert!(Cli::try_parse_from(["corulix", "instructions", "generate", "--write"]).is_ok());
+        assert!(Cli::try_parse_from(["corulix", "instructions", "generate", "--check"]).is_ok());
+    }
+
+    #[test]
+    fn instructions_generate_rejects_write_and_check_together() {
+        let result =
+            Cli::try_parse_from(["corulix", "instructions", "generate", "--write", "--check"]);
+        assert!(matches!(result, Err(error) if error.kind() == ErrorKind::ArgumentConflict));
+    }
+
+    #[test]
+    fn instructions_generate_rejects_an_unrecognized_format() {
+        let result = Cli::try_parse_from([
+            "corulix",
+            "instructions",
+            "generate",
+            "--format",
+            "standalone",
+        ]);
+        assert!(matches!(result, Err(error) if error.kind() == ErrorKind::InvalidValue));
+    }
+
+    #[test]
+    fn instructions_help_flags_exit_zero_equivalent() {
+        assert_help_or_version(
+            &["corulix", "instructions", "--help"],
+            ErrorKind::DisplayHelp,
+        );
+        assert_help_or_version(
+            &["corulix", "instructions", "generate", "--help"],
+            ErrorKind::DisplayHelp,
+        );
+    }
+
     /// The command model's own public inventory -- used by the enterprise
     /// help audit to prove help documents only real, current commands.
     #[test]
@@ -452,6 +642,8 @@ mod tests {
             "workspace",
             "parse",
             "mcp",
+            "config",
+            "instructions",
             "setup",
         ] {
             assert!(

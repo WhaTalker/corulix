@@ -5,7 +5,7 @@
 [package]
 name = "wht_corulix_mcp"
 description = "Thin MCP presentation layer for WhaTalker Corulix"
-version.workspace = true
+version = "1.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -17,7 +17,13 @@ readme.workspace = true
 publish = ["crates-io"]
 
 [dependencies]
-wht_corulix_core.workspace = true
+# Corulix 1.1.0 (ADR 0012, Phase M): consumes `EffectiveToolSet`/
+# `validate_tool_policy`/`ToolPolicyValidationError`/`CANONICAL_MCP_TOOL_NAMES`,
+# new in 1.1.0. `wht_corulix_engine` below stays at the shared `1.0.0` floor
+# deliberately -- this crate consumes no 1.1.0-only Engine API (workspace
+# config attachment is the CLI's own responsibility via
+# `CorulixEngine::with_workspace_config`, not this crate's).
+wht_corulix_core = { path = "../wht_corulix_core", version = "1.1.0" }
 wht_corulix_engine.workspace = true
 rmcp.workspace = true
 serde.workspace = true

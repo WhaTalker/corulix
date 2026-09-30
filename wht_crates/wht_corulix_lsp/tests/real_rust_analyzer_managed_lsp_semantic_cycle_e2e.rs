@@ -38,6 +38,27 @@
 //! documented in `real_rust_hostile_cargo_config_e2e.rs`'s own module doc).
 //! `MOCKED_ONLY_CLOSURE=NO`.
 
+// Windows note (M09/D96, P17-W corrective P4): `#![cfg(unix)]`-only for
+// this whole file. `LspSession::spawn`'s sole call site
+// (`wht_corulix_lsp::session.rs`) routes unconditionally through
+// `wht_corulix_tooling::ManagedProcess::spawn_with_workspace_root`, whose
+// own `#[cfg(not(unix))]` arm (`managed.rs`) unconditionally returns
+// `Err(ManagedProcessSpawnError::SpawnFailed)` -- there is no code path in
+// production today under which a workspace-bound LSP session spawns on
+// Windows. This is the same accepted, `FINAL_CLOSED` M09 contract already
+// on record ("Windows: workspace-bound LSP UNAVAILABLE_FAIL_CLOSED, zero
+// provider spawn") this file's own sole test previously gated per-test
+// rather than at the file level, leaving every shared helper dead code on
+// non-Unix targets. The `#[cfg(target_os = "windows")]` branches this file
+// used to carry (in `resolve_home_dir`, the manifest-selection helpers, and
+// several `eprintln!` lines) were speculative scaffolding for a
+// not-yet-existing Windows LSP-cycle path; per the same confirmed contract
+// above they were unreachable under any build of this file and have been
+// removed rather than left as unreachable dead code hidden behind the new
+// file-level gate (P17-W corrective P4 root-cause finding:
+// `RUST_ANALYZER_INTENDED_CONTRACT=UNIX_ONLY_FINAL_CONTRACT`).
+#![cfg(unix)]
+
 use std::error::Error;
 use std::fmt;
 use std::fs;
@@ -74,54 +95,36 @@ fn fail(message: impl Into<String>) -> Box<dyn Error> {
 /// Resolves this host's own home directory as an absolute path, never a
 /// bare `HOME`-string fallback.
 ///
-/// # Why this exists (P17-W-R? Windows `PathEscapesManagedRoot` defect)
+/// # Why this exists
 ///
 /// `std::env::var("HOME")` only errors when the variable is *absent* or not
 /// valid Unicode -- it happily returns `Ok(String::new())` when the
-/// variable is *present but empty*, which the previous `.unwrap_or_else`
-/// pattern never caught. A real Windows VM's own WMI-launched
-/// (`Win32_Process.Create`) job -- the exact mechanism used to run this
-/// suite's own detached native test passes -- was empirically confirmed
-/// (via a direct `echo HOME=%HOME%`/`echo USERPROFILE=%USERPROFILE%` probe
-/// baked into the launched job itself) to inherit `HOME=` (empty) while
-/// still correctly inheriting `USERPROFILE=C:\Users\<test-account>`, unlike an
-/// interactive SSH shell on the same host, which has `HOME` populated.
-/// With the old fallback, an empty `HOME` produced `PathBuf::from("")`,
-/// and joining relative path components onto an empty base yields a
-/// *relative* `PathBuf` (e.g. `.cache/.../roots/label-<stamp>`), silently
-/// resolved against the test process's current directory instead of the
-/// intended home tree. Every ordinary filesystem call along the way
-/// (`create_dir_all`, `fs::rename`, spawning the managed rust-analyzer
-/// process) tolerates a relative path just fine, since the process's
-/// current directory does not change mid-run -- so provisioning, the full
-/// LSP session, hover/definition/diagnostics, and shutdown all genuinely
-/// succeed. Only `uninstall::uninstall`'s own confinement re-check
-/// (`wht_corulix_workspace::canonicalize_external_path`, which explicitly
-/// requires `path.is_absolute()` before it will canonicalize anything)
-/// rejects the resulting non-absolute root, surfacing as
-/// `UninstallError::PathEscapesManagedRoot` -- which is *correct,
-/// fail-closed behavior* given a non-absolute confinement root, not a
-/// confinement-check bug. The actual defect was entirely here: this
-/// helper must never hand back a relative path. Falls back to the
-/// Windows-native `USERPROFILE` (confirmed present and correct in the same
-/// empirical probe) before the prior Unix-only `/root` default, and joins
-/// each path segment individually rather than via one embedded-`/`
-/// literal, so the result never carries a mixed `/`/`\` separator on
-/// Windows either (a second, independent hygiene defect this helper
-/// previously shared with every other `isolated_root()` in this suite).
+/// variable is *present but empty*, which a bare `.unwrap_or_else` pattern
+/// never catches. An empty `HOME` would produce `PathBuf::from("")`, and
+/// joining relative path components onto an empty base yields a *relative*
+/// `PathBuf`, silently resolved against the test process's current
+/// directory instead of the intended home tree -- most ordinary filesystem
+/// calls along the way tolerate that just fine, so the defect only
+/// resurfaces at `uninstall::uninstall`'s own confinement re-check
+/// (`wht_corulix_workspace::canonicalize_external_path`, which requires
+/// `path.is_absolute()`), surfacing as `UninstallError::PathEscapesManagedRoot`
+/// -- correct, fail-closed behavior given a non-absolute confinement root,
+/// not a confinement-check bug. This helper must never hand back a
+/// relative path.
+///
+/// (P17-W corrective P4: this function previously also carried a
+/// `#[cfg(windows)]` `USERPROFILE` fallback branch, added during a real
+/// native-Windows investigation of this exact empty-`HOME` behavior. That
+/// branch was removed once this whole file was confirmed
+/// `UNIX_ONLY_FINAL_CONTRACT` (`spawn_with_workspace_root` unconditionally
+/// fails closed on non-Unix in production, so this file's sole test never
+/// compiles for Windows at all) -- it was unreachable dead code, not a
+/// live Windows code path.)
 fn resolve_home_dir() -> PathBuf {
     if let Ok(home) = std::env::var("HOME")
         && !home.is_empty()
     {
         return PathBuf::from(home);
-    }
-    #[cfg(windows)]
-    {
-        if let Ok(user_profile) = std::env::var("USERPROFILE")
-            && !user_profile.is_empty()
-        {
-            return PathBuf::from(user_profile);
-        }
     }
     PathBuf::from("/root")
 }
@@ -142,28 +145,20 @@ fn isolated_root(label: &str) -> PathBuf {
 }
 
 /// This host's own real `rust-semantic-runtime` manifest -- the same
-/// `#[cfg(target_os = "windows")]`-gated selection
-/// `wht_corulix_lsp::managed_toolchain::RUST_SEMANTIC_RUNTIME_HOST_NATIVE`
+/// selection `wht_corulix_lsp::managed_toolchain::RUST_SEMANTIC_RUNTIME_HOST_NATIVE`
 /// performs internally (that constant is `pub(crate)`, unreachable from an
 /// external `tests/*.rs` compilation unit, so this duplicates only the
-/// `cfg` selection, never the manifest identity itself -- both arms are
-/// the real, unmodified, pinned public constants).
-#[cfg(target_os = "windows")]
-fn host_native_rust_semantic_runtime_manifest() -> provisioning::ManagedComponentManifest {
-    wht_corulix_tooling::managed_runtimes::RUST_SEMANTIC_RUNTIME_WINDOWS_X64
-}
-#[cfg(not(target_os = "windows"))]
+/// selection, never the manifest identity itself -- the real, unmodified,
+/// pinned public constant). Unconditional rather than `cfg`-branched on
+/// `target_os`: this whole file is `#![cfg(unix)]`-only
+/// (`UNIX_ONLY_FINAL_CONTRACT`, P17-W corrective P4), so a Windows arm here
+/// could never be selected.
 fn host_native_rust_semantic_runtime_manifest() -> provisioning::ManagedComponentManifest {
     wht_corulix_tooling::managed_runtimes::RUST_SEMANTIC_RUNTIME_LINUX_X64
 }
 
 /// This host's own real `rust-analyzer` manifest -- same rationale as
 /// [`host_native_rust_semantic_runtime_manifest`] immediately above.
-#[cfg(target_os = "windows")]
-fn host_native_rust_analyzer_manifest() -> provisioning::ManagedComponentManifest {
-    wht_corulix_lsp::managed_toolchain::RUST_ANALYZER_WINDOWS_X64
-}
-#[cfg(not(target_os = "windows"))]
 fn host_native_rust_analyzer_manifest() -> provisioning::ManagedComponentManifest {
     wht_corulix_lsp::managed_toolchain::RUST_ANALYZER_LINUX_X64
 }
@@ -274,14 +269,6 @@ fn line_and_column(text: &str, byte_offset: usize) -> (usize, usize) {
 /// stdlib hover + real local-module definition + real diagnostics -> real
 /// process-tree observation -> normal shutdown -> zero-orphan reap ->
 /// dependency-ordered uninstall of both components -> zero residual.
-// Windows note (M09/D96): `#[cfg(unix)]`-only. `LspSession::spawn` always
-// routes through `wht_corulix_tooling::ManagedProcess::spawn_with_workspace_
-// root`, which fails closed before any process is spawned on Windows (no
-// `fchdir`-equivalent primitive to preserve object-bound cwd across
-// `exec`) -- the same accepted, `FINAL_CLOSED` M09 contract already on
-// record ("Windows: workspace-bound LSP UNAVAILABLE_FAIL_CLOSED, zero
-// provider spawn"), mirroring this session's other identical closures.
-#[cfg(unix)]
 #[tokio::test]
 async fn real_rust_analyzer_managed_lsp_semantic_cycle_e2e() -> Result<(), Box<dyn Error>> {
     let root = isolated_root("semantic-cycle");
@@ -371,8 +358,6 @@ async fn real_rust_analyzer_managed_lsp_semantic_cycle_e2e() -> Result<(), Box<d
         ));
     }
     eprintln!("RUST_LSP_READINESS=PASS");
-    #[cfg(target_os = "windows")]
-    eprintln!("WINDOWS_RUST_LSP_READINESS=PASS");
 
     // --- LEASE: must be Active while the session is genuinely alive. ---
     match session.lease_state() {
@@ -474,8 +459,6 @@ async fn real_rust_analyzer_managed_lsp_semantic_cycle_e2e() -> Result<(), Box<d
         )));
     }
     eprintln!("RUST_LSP_DIAGNOSTICS=PASS");
-    #[cfg(target_os = "windows")]
-    eprintln!("WINDOWS_RUST_LSP_DIAGNOSTICS=PASS");
     eprintln!("RUST_LSP_E2E_MANAGED=PASS");
 
     // --- NORMAL SHUTDOWN / REAP ---
@@ -540,8 +523,6 @@ async fn real_rust_analyzer_managed_lsp_semantic_cycle_e2e() -> Result<(), Box<d
     }
     eprintln!("RUST_ANALYZER_RUST_RUNTIME_DEPENDENCY_SAFE_REMOVAL=PASS");
     eprintln!("RUST_ANALYZER_MANAGED=PASS");
-    #[cfg(target_os = "windows")]
-    eprintln!("WINDOWS_RUST_ANALYZER_MANAGED=PASS");
 
     let _ = fs::remove_dir_all(&root);
     Ok(())

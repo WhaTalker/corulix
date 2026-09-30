@@ -59,6 +59,42 @@ pub struct PlanOperationOutput {
 }
 
 // ---------------------------------------------------------------------
+// 2: workspace_info (Corulix 1.1.0, ADR 0012, Phase G)
+// ---------------------------------------------------------------------
+
+/// `workspace_info`'s own MCP-local output wrapper. `WorkspaceInfo` itself
+/// (published, all-public-fields, no `#[non_exhaustive]`) could not gain
+/// these fields directly without a real SemVer break -- confirmed via
+/// direct source read during this implementation's own preflight audit;
+/// the owner's resulting decision was a new, separate type instead of
+/// touching `WorkspaceInfo`. Lives here (not in `wht_corulix_core`) because
+/// it composes tool-exposure-policy counts this crate alone knows about.
+///
+/// Never reveals which specific tools are disabled -- only counts -- so a
+/// reduced tool policy narrows what a client can discover about itself
+/// without narrowing what it can infer about *other* connections' policy.
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct WorkspaceInfoView {
+    #[serde(flatten)]
+    pub workspace: WorkspaceInfo,
+    /// The compile-time-declared canonical tool count (always 14 today) --
+    /// see `wht_scripts/wht_verify_architecture.py` Rule S, which counts
+    /// the same `#[tool(...)]` declarations this number reports.
+    pub canonical_tool_count: u32,
+    /// How many of the canonical tools this connection's own effective
+    /// policy leaves visible -- `canonical_tool_count` when no workspace
+    /// policy narrowed it.
+    pub effective_visible_tool_count: u32,
+    /// Whether this connection attached a workspace-authored tool policy
+    /// at all (`true`) or is running Corulix 1.0.0's exact default,
+    /// unconfigured behavior (`false`) -- distinct from
+    /// `effective_visible_tool_count < canonical_tool_count`, since an
+    /// explicitly-authored policy that happens to disable nothing is still
+    /// "configured".
+    pub tool_policy_configured: bool,
+}
+
+// ---------------------------------------------------------------------
 // 5: search
 // ---------------------------------------------------------------------
 

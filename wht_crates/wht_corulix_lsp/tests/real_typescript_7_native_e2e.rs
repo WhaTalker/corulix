@@ -23,6 +23,20 @@
 //! `TYPESCRIPT_7_LSP_E2E=BLOCKED_MANAGED_PROVIDER_NOT_PROVISIONED` rather
 //! than failing.
 
+// Windows note (M09/D96): `#![cfg(unix)]`-only for this whole file --
+// `LspSession::spawn` (directly or via this file's own `run_full_vertical`
+// helper) always fails closed on Windows via
+// `ManagedProcess::spawn_with_workspace_root` before any process is
+// spawned -- the same accepted, `FINAL_CLOSED` M09 contract already on
+// record ("Windows: workspace-bound LSP UNAVAILABLE_FAIL_CLOSED, zero
+// provider spawn"). Every test in this file previously carried its own
+// per-test `#[cfg(unix)]`, which left every shared helper/fixture/constant
+// dead code on non-Unix targets once none of their callers were compiled
+// there; gating the whole file matches this crate's own established
+// convention for the same defect class (see e.g.
+// `real_ts6_adversarial_e2e.rs`, `real_poisoned_path_executable_authority_e2e.rs`).
+#![cfg(unix)]
+
 use std::error::Error;
 use std::fmt;
 use std::fs;
@@ -375,13 +389,6 @@ async fn run_full_vertical(
     Ok(())
 }
 
-// Windows note (M09/D96): `#[cfg(unix)]`-only. `LspSession::spawn` (directly
-// or via this file's own `run_full_vertical` helper) always fails closed on
-// Windows via `ManagedProcess::spawn_with_workspace_root` before any process
-// is spawned -- the same accepted, `FINAL_CLOSED` M09 contract already on
-// record ("Windows: workspace-bound LSP UNAVAILABLE_FAIL_CLOSED, zero
-// provider spawn").
-#[cfg(unix)]
 #[tokio::test]
 async fn real_typescript_7_full_vertical_e2e() -> Result<(), Box<dyn Error>> {
     run_full_vertical(
@@ -394,13 +401,6 @@ async fn real_typescript_7_full_vertical_e2e() -> Result<(), Box<dyn Error>> {
     .await
 }
 
-// Windows note (M09/D96): `#[cfg(unix)]`-only. `LspSession::spawn` (directly
-// or via this file's own `run_full_vertical` helper) always fails closed on
-// Windows via `ManagedProcess::spawn_with_workspace_root` before any process
-// is spawned -- the same accepted, `FINAL_CLOSED` M09 contract already on
-// record ("Windows: workspace-bound LSP UNAVAILABLE_FAIL_CLOSED, zero
-// provider spawn").
-#[cfg(unix)]
 #[tokio::test]
 async fn real_javascript_7_full_vertical_e2e() -> Result<(), Box<dyn Error>> {
     run_full_vertical(
@@ -422,13 +422,6 @@ async fn real_javascript_7_full_vertical_e2e() -> Result<(), Box<dyn Error>> {
 /// this profile is built exclusively from `auxiliary_tools`/`interpreter`
 /// (both empty/`None` for this provider) -- `npm` is never on it,
 /// regardless of anything a hostile workspace declares.
-// Windows note (M09/D96): `#[cfg(unix)]`-only. `LspSession::spawn` (directly
-// or via this file's own `run_full_vertical` helper) always fails closed on
-// Windows via `ManagedProcess::spawn_with_workspace_root` before any process
-// is spawned -- the same accepted, `FINAL_CLOSED` M09 contract already on
-// record ("Windows: workspace-bound LSP UNAVAILABLE_FAIL_CLOSED, zero
-// provider spawn").
-#[cfg(unix)]
 #[tokio::test]
 async fn ata_never_resolves_npm_even_for_an_inferred_project_requiring_a_missing_package()
 -> Result<(), Box<dyn Error>> {
@@ -496,13 +489,6 @@ async fn ata_never_resolves_npm_even_for_an_inferred_project_requiring_a_missing
 /// but a real, standalone provision -> spawn -> ready -> uninstall ->
 /// verify-absent -> idempotent-second-call sequence with an external
 /// sentinel proven unmutated throughout.
-// Windows note (M09/D96): `#[cfg(unix)]`-only. `LspSession::spawn` (directly
-// or via this file's own `run_full_vertical` helper) always fails closed on
-// Windows via `ManagedProcess::spawn_with_workspace_root` before any process
-// is spawned -- the same accepted, `FINAL_CLOSED` M09 contract already on
-// record ("Windows: workspace-bound LSP UNAVAILABLE_FAIL_CLOSED, zero
-// provider spawn").
-#[cfg(unix)]
 #[tokio::test]
 async fn real_typescript_7_managed_install_use_uninstall_lifecycle_e2e()
 -> Result<(), Box<dyn Error>> {
@@ -618,13 +604,6 @@ async fn real_typescript_7_managed_install_use_uninstall_lifecycle_e2e()
 /// after uninstall fails, `Transport(Closed)`), never merely that the
 /// component directory was removed while a process kept running
 /// (`TS7_ACTIVE_PROVIDER_UNINSTALL_SAFETY=PASS`).
-// Windows note (M09/D96): `#[cfg(unix)]`-only. `LspSession::spawn` (directly
-// or via this file's own `run_full_vertical` helper) always fails closed on
-// Windows via `ManagedProcess::spawn_with_workspace_root` before any process
-// is spawned -- the same accepted, `FINAL_CLOSED` M09 contract already on
-// record ("Windows: workspace-bound LSP UNAVAILABLE_FAIL_CLOSED, zero
-// provider spawn").
-#[cfg(unix)]
 #[tokio::test]
 async fn real_typescript_7_active_provider_uninstall_safety_e2e() -> Result<(), Box<dyn Error>> {
     let _lock = real_ts7_session_lock().await;

@@ -33,8 +33,8 @@ mod help;
 
 use clap::Parser;
 use cli::{
-    Cli, Command, LanguagesCommand, McpCommand, SetupProfileArg, ToolchainCommand,
-    WorkspaceCommand, WorkspaceSelection,
+    Cli, Command, ConfigCommand, InstructionsCommand, LanguagesCommand, McpCommand,
+    SetupProfileArg, ToolchainCommand, WorkspaceCommand, WorkspaceSelection,
 };
 use std::{
     path::{Path, PathBuf},
@@ -75,6 +75,24 @@ mod exit_code {
     /// distinct from [`SETUP_FLAG_CONFLICT`], which never reaches
     /// persistence/reconciliation at all.
     pub const SETUP_RECONCILIATION_INCOMPLETE: u8 = 8;
+    /// Corulix 1.1.0 (ADR 0012): `config validate`/`config inspect` found the
+    /// workspace's own `WhaTalker_Corulix_JSON_Config.json` present but
+    /// rejected it -- malformed, structurally invalid, or a semantic tool-
+    /// policy violation. Distinct from [`WORKSPACE_RESOLUTION_FAILURE`]:
+    /// the workspace itself resolved fine; its own config file did not.
+    /// An absent config file is valid and never produces this code.
+    pub const WORKSPACE_CONFIG_FAILURE: u8 = 9;
+    /// Corulix 1.1.0 (ADR 0012, Phase I): `instructions generate --check`
+    /// found drift between the canonical target's current content and a
+    /// fresh render -- never returned by `--write` or the default
+    /// (stdout-only) mode, and never returned when the target is absent AND
+    /// `--write` was not requested (absence during `--check` is itself
+    /// reported as drift, since a real `--write` would create the file).
+    pub const INSTRUCTIONS_DRIFT_DETECTED: u8 = 10;
+    /// Corulix 1.1.0 (ADR 0012, Phase I): `instructions generate --write`
+    /// found an existing target without a valid Corulix-managed ownership
+    /// marker and refused to overwrite it -- there is no `--force`.
+    pub const INSTRUCTIONS_REFUSED: u8 = 11;
 }
 
 /// Builds the resolver inputs for one workspace-selecting command
@@ -252,6 +270,24 @@ async fn main() -> ExitCode {
                     host_config,
                 },
         } => run_mcp_stdio(&workspace, host_config.as_deref()).await,
+        Command::Config {
+            command: ConfigCommand::Validate { workspace },
+        } => run_config_validate(&workspace).await,
+        Command::Config {
+            command: ConfigCommand::Inspect { workspace, root },
+        } => run_config_inspect(&workspace, root.workspace_root.as_deref()).await,
+        Command::Config {
+            command: ConfigCommand::Schema,
+        } => run_config_schema(),
+        Command::Instructions {
+            command:
+                InstructionsCommand::Generate {
+                    workspace,
+                    format,
+                    write,
+                    check,
+                },
+        } => run_instructions_generate(&workspace, format, write, check).await,
         Command::Setup {
             profile,
             only,
@@ -325,6 +361,245 @@ async fn run_workspace_inspect(
                     Err(exit_code::WORKSPACE_RESOLUTION_FAILURE)
                 }
             }
+        }
+    }
+}
+
+/// Corulix 1.1.0 (ADR 0012): `config validate`/`config inspect`'s shared
+/// machine-readable summary of a resolved [`wht_corulix_config::BoundWorkspaceConfig`].
+/// CLI-owned presentation data only -- never re-exported from
+/// `wht_corulix_config` itself, since the CLI's own JSON shape is allowed to
+/// evolve independently of that crate's internal validated types.
+#[derive(serde::Serialize)]
+struct WorkspaceConfigSummary {
+    workspace_config_status: &'static str,
+    canonical_tool_count: u32,
+    effective_visible_tool_count: u32,
+    disabled_tools: Vec<&'static str>,
+    default_disabled_categories: Vec<wht_corulix_core::ProviderCategory>,
+    root_override_count: usize,
+    /// Present only for `config inspect --workspace-root <ROOT>`: that one
+    /// root's own effective disabled categories (workspace defaults union
+    /// its own override, if any) -- `None` for `config validate` and for a
+    /// `config inspect` invocation with no `--workspace-root`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selected_root_effective_disabled_categories: Option<Vec<wht_corulix_core::ProviderCategory>>,
+}
+
+impl WorkspaceConfigSummary {
+    fn from_bound(bound: &wht_corulix_config::BoundWorkspaceConfig) -> Self {
+        let mut disabled_tools: Vec<&'static str> = bound.tool_policy.disabled_names().collect();
+        disabled_tools.sort_unstable();
+        let mut default_disabled_categories: Vec<wht_corulix_core::ProviderCategory> =
+            bound.defaults.disabled_categories.iter().copied().collect();
+        default_disabled_categories.sort_by_key(|category| format!("{category:?}"));
+        Self {
+            workspace_config_status: "OK",
+            canonical_tool_count: wht_corulix_core::EffectiveToolSet::canonical_tool_count(),
+            effective_visible_tool_count: bound.tool_policy.effective_visible_tool_count(),
+            disabled_tools,
+            default_disabled_categories,
+            root_override_count: bound.root_overrides.len(),
+            selected_root_effective_disabled_categories: None,
+        }
+    }
+}
+
+/// Corulix 1.1.0 (ADR 0012): performs the exact same load + structural +
+/// semantic validation `corulix mcp stdio` applies at startup
+/// ([`wht_corulix_config::load_workspace_config`]), so a configuration that
+/// passes here is guaranteed not to later fail MCP construction for the
+/// same reason (ADR 0012's own CLI/MCP policy-validation-equivalence
+/// requirement). Opens no engine, starts no MCP server, mutates nothing.
+async fn run_config_validate(selection: &WorkspaceSelection) -> Result<(), u8> {
+    let context = resolve_or_report(selection).await?;
+    match wht_corulix_config::load_workspace_config(&context).await {
+        Ok(bound) => print_json_or_internal_error(&WorkspaceConfigSummary::from_bound(&bound)),
+        Err(error) => {
+            eprintln!("WORKSPACE_CONFIG_STATUS=FAILED");
+            eprintln!("REASON={error}");
+            Err(exit_code::WORKSPACE_CONFIG_FAILURE)
+        }
+    }
+}
+
+/// Corulix 1.1.0 (ADR 0012): reports the resolved effective workspace
+/// configuration for local operator/diagnostic use -- available even when
+/// `workspace_info`'s own MCP tool is disabled by the active tool policy,
+/// since this command is not itself an MCP tool.
+async fn run_config_inspect(
+    selection: &WorkspaceSelection,
+    root_selector: Option<&str>,
+) -> Result<(), u8> {
+    let context = resolve_or_report(selection).await?;
+    let bound = match wht_corulix_config::load_workspace_config(&context).await {
+        Ok(bound) => bound,
+        Err(error) => {
+            eprintln!("WORKSPACE_CONFIG_STATUS=FAILED");
+            eprintln!("REASON={error}");
+            return Err(exit_code::WORKSPACE_CONFIG_FAILURE);
+        }
+    };
+    let mut summary = WorkspaceConfigSummary::from_bound(&bound);
+
+    if let Some(selector) = root_selector {
+        let root = context
+            .resolve_root(Some(selector))
+            .map_err(|_| exit_code::WORKSPACE_RESOLUTION_FAILURE)?;
+        let root_id = context
+            .resolve_root_id_by_canonical_path(root.canonical_path())
+            .ok_or(exit_code::INTERNAL_ERROR)?;
+        let mut effective: std::collections::HashSet<wht_corulix_core::ProviderCategory> =
+            bound.defaults.disabled_categories.clone();
+        if let Some((_, overrides)) = bound
+            .root_overrides
+            .iter()
+            .find(|(bound_root_id, _)| *bound_root_id == root_id)
+        {
+            effective.extend(overrides.disabled_categories.iter().copied());
+        }
+        let mut effective: Vec<wht_corulix_core::ProviderCategory> =
+            effective.into_iter().collect();
+        effective.sort_by_key(|category| format!("{category:?}"));
+        summary.selected_root_effective_disabled_categories = Some(effective);
+    }
+
+    print_json_or_internal_error(&summary)
+}
+
+/// Corulix 1.1.0 (ADR 0012): emits the canonical JSON Schema. No workspace
+/// resolution, no filesystem I/O -- the schema is static product data.
+fn run_config_schema() -> Result<(), u8> {
+    print_json_or_internal_error(&wht_corulix_config::workspace_config_json_schema())
+}
+
+/// Corulix 1.1.0 (ADR 0012, Phase I): the canonical target filename for a
+/// generated instructions file, per `--format`.
+fn instructions_file_name(format: cli::InstructionsFormatArg) -> &'static str {
+    match format {
+        cli::InstructionsFormatArg::Agents => "AGENTS.md",
+        cli::InstructionsFormatArg::Claude => "CLAUDE.md",
+    }
+}
+
+/// Bound on a read of an existing instructions target for `--check`/managed-
+/// marker detection -- generous relative to real generated content (a few
+/// KiB), but never unbounded.
+const MAX_INSTRUCTIONS_FILE_BYTES: u64 = 256 * 1024;
+
+/// Corulix 1.1.0 (ADR 0012, Phase I): `corulix instructions generate`.
+/// Default mode prints to stdout and performs no filesystem I/O at all.
+/// `--check`/`--write` both resolve the same canonical target
+/// [`wht_corulix_config::workspace_config`]'s own loader uses for
+/// `WhaTalker_Corulix_JSON_Config.json` (beside a multi-root descriptor, or
+/// directly inside a single root) -- reusing that exact resolution, not a
+/// second, independently-derived one.
+async fn run_instructions_generate(
+    selection: &WorkspaceSelection,
+    format: cli::InstructionsFormatArg,
+    write: bool,
+    check: bool,
+) -> Result<(), u8> {
+    let context = resolve_or_report(selection).await?;
+    let bound = match wht_corulix_config::load_workspace_config(&context).await {
+        Ok(bound) => bound,
+        Err(error) => {
+            eprintln!("WORKSPACE_CONFIG_STATUS=FAILED");
+            eprintln!("REASON={error}");
+            return Err(exit_code::WORKSPACE_CONFIG_FAILURE);
+        }
+    };
+
+    let render_format = match format {
+        cli::InstructionsFormatArg::Agents => {
+            wht_corulix_mcp::instructions::InstructionsFormat::Agents
+        }
+        cli::InstructionsFormatArg::Claude => {
+            wht_corulix_mcp::instructions::InstructionsFormat::Claude
+        }
+    };
+    let rendered = wht_corulix_mcp::instructions::render(render_format, &bound.tool_policy);
+
+    if !write && !check {
+        print!("{rendered}");
+        return Ok(());
+    }
+
+    let root: wht_corulix_workspace::WorkspaceRoot = match context.descriptor_location() {
+        Some(descriptor) => descriptor.clone(),
+        None => context
+            .resolve_root(None)
+            .map_err(|_| exit_code::WORKSPACE_RESOLUTION_FAILURE)?
+            .clone(),
+    };
+    let relative = PathBuf::from(instructions_file_name(format));
+
+    let existing = wht_corulix_workspace::confined_read_optional(
+        root.clone(),
+        relative.clone(),
+        MAX_INSTRUCTIONS_FILE_BYTES,
+    )
+    .await
+    .map_err(|_| exit_code::INTERNAL_ERROR)?;
+
+    if check {
+        return match existing {
+            None => {
+                println!("INSTRUCTIONS_CHECK_STATUS=DRIFT");
+                println!("REASON=target is absent; --write would create it");
+                Err(exit_code::INSTRUCTIONS_DRIFT_DETECTED)
+            }
+            Some(bytes) if bytes == rendered.as_bytes() => {
+                println!("INSTRUCTIONS_CHECK_STATUS=OK");
+                Ok(())
+            }
+            Some(_) => {
+                println!("INSTRUCTIONS_CHECK_STATUS=DRIFT");
+                println!(
+                    "REASON=existing target content does not match a fresh render of the effective configuration"
+                );
+                Err(exit_code::INSTRUCTIONS_DRIFT_DETECTED)
+            }
+        };
+    }
+
+    // `write == true` from here on (`--write`/`--check` are `conflicts_with`
+    // at the parser level, so both being false already returned above).
+    if let Some(bytes) = &existing
+        && !wht_corulix_mcp::instructions::is_corulix_managed(bytes)
+    {
+        eprintln!("INSTRUCTIONS_WRITE_STATUS=REFUSED");
+        eprintln!(
+            "REASON=existing target has no Corulix-managed ownership marker; reconcile it manually (no --force exists)"
+        );
+        return Err(exit_code::INSTRUCTIONS_REFUSED);
+    }
+
+    let write_result =
+        tokio::task::spawn_blocking(move || -> wht_corulix_core::CorulixResult<()> {
+            let content = rendered.into_bytes();
+            if existing.is_none() {
+                let target = wht_corulix_workspace::resolve_new_target(&root, &relative)?;
+                target.create_exclusive(&content)?;
+                return Ok(());
+            }
+            let parent = wht_corulix_workspace::resolve_parent(&root, &relative)?;
+            let (staged, _staged_file) = parent.create_exclusive_temp_sibling(&content)?;
+            let destination = wht_corulix_workspace::resolve_existing_target(&root, &relative)?;
+            staged.rename_into(destination)
+        })
+        .await
+        .unwrap_or(Err(wht_corulix_core::CorulixError::Internal));
+
+    match write_result {
+        Ok(()) => {
+            println!("INSTRUCTIONS_WRITE_STATUS=OK");
+            Ok(())
+        }
+        Err(error) => {
+            eprintln!("INSTRUCTIONS_WRITE_STATUS=FAILED");
+            eprintln!("REASON={error}");
+            Err(exit_code::INTERNAL_ERROR)
         }
     }
 }
@@ -439,13 +714,35 @@ async fn run_mcp_stdio(
         eprintln!("REASON={error:?}");
     }
 
+    // Corulix 1.1.0 (ADR 0012): resolve the workspace's own optional
+    // `WhaTalker_Corulix_JSON_Config.json` BEFORE `context` is moved into
+    // the engine below -- this is the exact same `load_workspace_config`
+    // path `corulix config validate`/`config inspect` use, so MCP startup
+    // and CLI validation are provably the same validation, never two. A
+    // present-but-invalid config fails MCP startup closed (exit 9),
+    // exactly like `config validate` reports it -- never silently falls
+    // back to an unconfigured/all-enabled server.
+    let bound = match wht_corulix_config::load_workspace_config(&context).await {
+        Ok(bound) => bound,
+        Err(error) => {
+            eprintln!("WORKSPACE_CONFIG_STATUS=FAILED");
+            eprintln!("REASON={error}");
+            return Err(exit_code::WORKSPACE_CONFIG_FAILURE);
+        }
+    };
+
     // From this point forward stdout belongs exclusively to RMCP stdio.
-    let engine = Arc::new(CorulixEngine::open_with_host_config(
-        context,
-        trusted,
-        host_config,
-    ));
-    wht_corulix_mcp::serve_stdio(engine, workspace_identity)
+    let engine = Arc::new(
+        CorulixEngine::open_with_host_config(context, trusted, host_config)
+            .with_workspace_config(bound.clone()),
+    );
+    let server = match wht_corulix_mcp::CorulixMcpServer::new(engine, workspace_identity)
+        .and_then(|server| server.with_tool_policy(Ok(bound.tool_policy)))
+    {
+        Ok(server) => server,
+        Err(_) => return Err(exit_code::INTERNAL_ERROR),
+    };
+    wht_corulix_mcp::serve_stdio(server)
         .await
         .map_err(|_| exit_code::INTERNAL_ERROR)
 }

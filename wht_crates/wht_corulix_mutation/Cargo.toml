@@ -5,7 +5,7 @@
 [package]
 name = "wht_corulix_mutation"
 description = "Sole owner of the canonical governed mutation transaction (MutationBatch: prepare/stage/commit/verify/recover) for WhaTalker Corulix"
-version.workspace = true
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

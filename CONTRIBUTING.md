@@ -42,7 +42,7 @@ Dependency changes additionally require dependency/security/license review.
 
 ## No-Git release authority
 
-Corulix's official 1.0.0 release authority is not defined by local Git history. The release process is documented in `wht_docs/wht_releasing.md`.
+Corulix's official release authority is not defined by local Git history. The release process is documented in `wht_docs/wht_releasing.md`.
 
 ## Legal note
 

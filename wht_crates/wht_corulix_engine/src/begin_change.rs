@@ -164,7 +164,7 @@ impl CorulixEngine {
                     && let Ok(managed_root) =
                         wht_corulix_tooling::provisioning::managed_toolchain_root()
                 {
-                    let effective = self.effective_config();
+                    let effective = self.effective_config(self.root_id_for(&root));
                     let availability = wht_corulix_formatter::resolve_formatter_availability(
                         target_language,
                         &effective,
@@ -193,7 +193,7 @@ impl CorulixEngine {
                     && requirement.applicability == ToolApplicability::Required
             });
             if typecheck_build_required {
-                let effective = self.effective_config();
+                let effective = self.effective_config(self.root_id_for(&root));
                 let (typecheck_build, linter, test_runner) =
                     live_diagnostics_availability(language, &effective);
                 snapshot =

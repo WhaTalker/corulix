@@ -5,7 +5,7 @@
 [package]
 name = "wht_corulix_process_unix"
 description = "Narrow, audited Unix pre_exec/fchdir FFI boundary for pinning a child process's cwd to a WorkspaceRoot object identity (approved unsafe carve-out; mirrors Architecture Rule W's Windows precedent)"
-version.workspace = true
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

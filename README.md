@@ -6,16 +6,16 @@ Built by **[WhaTalker Inc.](https://whatalker.com)**. Product website: **[coruli
 
 [![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](./LICENSE)
 [![Rust 1.97.1](https://img.shields.io/badge/rust-1.97.1-orange.svg)](./rust-toolchain.toml)
-[![Version 1.0.0](https://img.shields.io/badge/version-1.0.0-informational.svg)](./VERSION)
+[![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-informational.svg)](./VERSION)
 
 ```text
 Product:           WhaTalker Corulix
 Brand:             Corulix™
 CLI:               corulix
-Version:           1.0.0
+Version:           1.1.0
 License:           AGPL-3.0-only
 MCP transport:     stdio
-Public MCP tools:  14
+Public MCP tools:  14 (workspace-policy downscopeable)
 Supported source:  Rust, Go, TypeScript/TSX, JavaScript/JSX, Python
 ```
 
@@ -25,10 +25,25 @@ Corulix is a Rust-based MCP server that gives AI coding agents a governed interf
 
 Corulix is not a general-purpose shell, Git client, or unrestricted file editor. Workspace changes are made only through the declared change-session workflow and are subject to the product's validation and authority model.
 
+## What's new in Corulix 1.1.0
+
+**New in 1.1.0:**
+
+- **Workspace JSON configuration** — an optional, workspace-scoped, non-privileged `WhaTalker_Corulix_JSON_Config.json` that can narrow (never widen) MCP tool exposure and provider-category availability. See [Workspace JSON configuration](#workspace-json-configuration-110) below.
+- **Tool-policy downscoping** — `toolPolicy.disabledTools` lets a workspace hide a subset of the canonical MCP tools from discovery and direct invocation, subject to fixed mutation-lifecycle dependency rules.
+- **Provider-category narrowing** — `defaults.disabledCategories`, optionally narrowed further per member root via `rootOverrides[]`.
+- **Portable rooted-locator rejection** — an absolute or rooted `rootOverrides[].root` locator (POSIX absolute, Windows drive-absolute/drive-relative, or UNC/device-namespace syntax) is rejected the same way regardless of which host OS runs the validator.
+- **`corulix config` command family** — `config validate`, `config inspect`, and `config schema`, all zero-mutation, sharing one validator with `corulix mcp stdio`'s own startup path.
+- **`corulix instructions generate`** — renders the workspace's effective configuration as an advisory `AGENTS.md` (or a `CLAUDE.md` `@AGENTS.md` import bridge), with managed-write safety (no `--force`; an unmanaged existing file is never overwritten).
+- **Native Windows x86_64 certification** — full native MSVC build, complete workspace test suite, PE32+/AMD64 binary-format certification, and CLI/MCP/config-policy runtime certification, alongside the existing Linux x86_64 native certification.
+- **Linux ARM64 release artifact** — a real `aarch64-unknown-linux-gnu` cross-built binary, architecture-verified; see [Platform support](#platform-support) for its exact certification scope.
+
+**Unchanged public contract:** the 14 public MCP tools, their names and semantics, the `ChangeSession` governed-mutation lifecycle, the managed-toolchain model, and the workspace trust/security model are all unchanged from 1.0.0. Workspace JSON configuration can only ever reduce the effective MCP tool surface below its unchanged canonical set of 14 — it can never add a 15th tool or grant any additional privilege.
+
 ## Core capabilities
 
-| Capability              | Current 1.0.0 behavior                                                                                         |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Capability              | Current 1.1.0 behavior                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------- |
 | Workspace discovery     | Single-root and VS Code multi-root workspace discovery with bounded, canonicalized resolution                  |
 | Text search             | Bounded in-process search constrained to the active workspace                                                  |
 | Structural intelligence | Tree-sitter parsing, symbols, scopes and structural analysis                                                   |
@@ -39,7 +54,8 @@ Corulix is not a general-purpose shell, Git client, or unrestricted file editor.
 | Provider control        | Managed and operator-approved providers; ambient `PATH` is not provider authority                              |
 | Managed toolchains      | Pinned/checksummed component provisioning with lifecycle ownership and uninstall handling                      |
 | Workspace security      | Canonicalized confinement, trust separation and fail-closed execution policy                                   |
-| Cross-platform runtime  | Linux and native Windows release support for 1.0.0                                                             |
+| Workspace configuration | Optional `WhaTalker_Corulix_JSON_Config.json` narrowing MCP tool exposure and provider categories (new in 1.1.0) |
+| Cross-platform runtime  | Native Linux x86_64 and native Windows x86_64 release support, plus a Linux ARM64 cross-built release artifact  |
 
 ## Supported languages
 
@@ -55,7 +71,7 @@ See [`wht_docs/wht_language_support.md`](wht_docs/wht_language_support.md) for t
 
 ## MCP
 
-Corulix 1.0.0 exposes exactly **14 public MCP tools** over stdio:
+Corulix 1.1.0 exposes exactly **14 public MCP tools** over stdio:
 
 | Tool               | Purpose                                                                                     |
 | ------------------ | ------------------------------------------------------------------------------------------- |
@@ -87,6 +103,115 @@ corulix mcp stdio --workspace-file <FILE.code-workspace>
 ```
 
 See [`wht_docs/wht_mcp_compatibility.md`](wht_docs/wht_mcp_compatibility.md).
+
+## Workspace JSON configuration (1.1.0)
+
+A workspace may optionally carry its own `WhaTalker_Corulix_JSON_Config.json` — the exact canonical filename, case-sensitive. It is read only from its canonical fixed location (beside a `.code-workspace` descriptor for a multi-root workspace, or directly inside a single root) — there is no explicit `--workspace-config <FILE>` path in 1.1.0.
+
+This file is Corulix's own **workspace policy/configuration**. It is not, and does not replace, your MCP host or client's own connection configuration (e.g. how your AI client is told to launch `corulix mcp stdio`) — that remains entirely your host's own concern.
+
+An absent config file reproduces Corulix 1.0.0's exact behavior (all 14 tools enabled, no category narrowing). Every other read failure (permission denied, oversized, invalid UTF-8, malformed content) fails closed — never silently treated as absent.
+
+### Complete valid example
+
+```json
+{
+  "configName": "WhaTalker Corulix JSON Config",
+  "schemaVersion": 1,
+  "toolPolicy": {
+    "disabledTools": [
+      "begin_change",
+      "submit_edit",
+      "validate_change",
+      "change_status",
+      "complete_change",
+      "abort_change"
+    ]
+  },
+  "defaults": {
+    "disabledCategories": ["FORMATTER"]
+  },
+  "rootOverrides": [
+    { "root": "wht_backend", "disabledCategories": ["FORMATTER", "LINTER"] },
+    { "root": "wht_frontend", "disabledCategories": ["FORMATTER"] }
+  ]
+}
+```
+
+This example is machine-validated against the real Corulix 1.1.0 binary in a two-root `wht_backend`/`wht_frontend` workspace: `corulix config validate --workspace-file <Project.code-workspace>` reports `workspace_config_status: "OK"`, `effective_visible_tool_count: 8`, and `root_override_count: 2`; `corulix config inspect --workspace-file <Project.code-workspace> --workspace-root wht_backend` reports that root's own effective disabled categories as the union `["FORMATTER", "LINTER"]`.
+
+### Field reference
+
+| Field | Type | Required | Purpose / effective behavior |
+| --- | --- | --- | --- |
+| `configName` | string | yes | Must be exactly `"WhaTalker Corulix JSON Config"`. Any other value fails closed before the rest of the file is even parsed. |
+| `schemaVersion` | integer | yes | Must be exactly `1` for Corulix 1.1.0. An unsupported or non-integer value fails closed with a dedicated error, checked before the strict body is parsed — so a future schema version reports "unsupported version," never generic "unknown field" noise. |
+| `toolPolicy.disabledTools` | array of string | no (default: empty) | A deny-list of canonical MCP tool names to hide from MCP discovery and direct invocation. Absent or empty means all 14 tools stay visible. Reduces only — it can never add a tool beyond the canonical 14. A duplicate entry, or a name that isn't one of the 14 canonical tools, is rejected. Disabling `begin_change`, `complete_change`, or `submit_edit` without also disabling their required lifecycle companions is rejected (see the mutation-lifecycle rules below). |
+| `defaults.disabledCategories` | array of string | no (default: empty) | Provider categories (`TEXT_SEARCH`, `STRUCTURAL_PARSE`, `LANGUAGE_SERVER`, `FORMATTER`, `LINTER`, `TYPECHECK_BUILD`, `TEST_RUNNER`, `RUNTIME`) disabled workspace-wide. A duplicate entry is rejected. |
+| `rootOverrides[].root` | string | — | A workspace-relative folder locator matching `.code-workspace`'s own `folders[].path` convention. Rejected outright, on every host OS, if it is a POSIX absolute path, a Windows drive-absolute/drive-relative path, or a UNC/device-namespace path — this rejection is a pure string check, not host-native path semantics, so the same locator is rejected identically whether Corulix itself is running on Linux or Windows. The accepted string is never itself authority: it is canonicalized and matched only against the workspace's own already-authorized member roots; a locator that doesn't resolve to one of them is rejected the same way whether it "almost" resolved or doesn't exist at all. |
+| `rootOverrides[].disabledCategories` | array of string | — | That one root's own additional disabled categories. The root's effective set is the union of this array and `defaults.disabledCategories` — narrowing only, never re-enabling something a broader scope already disabled. |
+
+### Tool-policy example (14 → 8)
+
+Disabling the entire six-tool mutation family is the canonical read-only pattern:
+
+```json
+{
+  "configName": "WhaTalker Corulix JSON Config",
+  "schemaVersion": 1,
+  "toolPolicy": {
+    "disabledTools": [
+      "begin_change",
+      "submit_edit",
+      "validate_change",
+      "change_status",
+      "complete_change",
+      "abort_change"
+    ]
+  }
+}
+```
+
+Machine-verified: `corulix config inspect --workspace <DIRECTORY>` reports `effective_visible_tool_count: 8` (the 8 non-mutation tools remain: `runtime_identity`, `workspace_info`, `toolchain_status`, `plan_operation`, `search`, `parse_file`, `semantic`, `format_preview`), and a live MCP `tools/list` returns exactly those same 8 names.
+
+Three static rules keep a policy internally consistent, enforced identically by `config validate` and by `corulix mcp stdio` at startup — so a policy that passes `config validate` is guaranteed not to later be refused by the MCP server for the same reason, and vice versa:
+
+1. If `begin_change` is disabled, all five downstream lifecycle tools (`submit_edit`, `validate_change`, `change_status`, `complete_change`, `abort_change`) must also be disabled.
+2. If `complete_change` is enabled, both `begin_change` and `validate_change` must be enabled.
+3. If `submit_edit` is enabled, `begin_change`, `validate_change`, and `complete_change` must all be enabled — `submit_edit` is the file-mutating capability, and Corulix refuses to expose a mutation with no visible, governed path to validated completion.
+
+### Invalid example — rejected on every host OS
+
+```json
+{
+  "configName": "WhaTalker Corulix JSON Config",
+  "schemaVersion": 1,
+  "rootOverrides": [
+    { "root": "C:\\Windows\\System32", "disabledCategories": ["FORMATTER"] }
+  ]
+}
+```
+
+`corulix config validate` rejects this with exit code `9` and `REASON=rootOverrides[].root is invalid: must not be an absolute or rooted path (POSIX absolute, Windows drive-absolute/drive-relative, or UNC/device-namespace syntax)` — verified identically on the certified Linux x86_64 and Windows x86_64 1.1.0 binaries.
+
+### CLI commands
+
+```sh
+corulix config validate  [--workspace PATH | --workspace-file FILE]
+corulix config inspect   [--workspace PATH | --workspace-file FILE] [--workspace-root ROOT]
+corulix config schema
+```
+
+All three are zero-mutation: they open no engine, start no MCP server, and provision nothing. `config schema` takes no flags and emits the canonical JSON Schema (JSON by default — there is no `--json` flag). Exit codes: `0` valid (including a genuinely absent config file); `3` the workspace itself could not be resolved; `9` the config file exists but is malformed, structurally invalid, or fails semantic tool-policy validation.
+
+See [`wht_docs/wht_workspace_json_config_reference.md`](wht_docs/wht_workspace_json_config_reference.md) for the complete schema, authority model, and additional worked examples.
+
+`corulix instructions generate` renders this same effective configuration as an advisory `AGENTS.md` (or a one-line `CLAUDE.md` `@AGENTS.md` import bridge). It is advisory documentation only — it carries no Corulix enforcement weight and is never deserialized back into runtime authority. Default prints to stdout; `--write` creates or safely replaces a Corulix-managed file (never an unmanaged/hand-authored one — there is no `--force`); `--check` reports drift without mutating anything.
+
+```sh
+corulix instructions generate --workspace <DIRECTORY> --write
+```
+
 
 ## AI clients validated with Corulix
 
@@ -177,25 +302,25 @@ corulix setup --only rust,python
 corulix setup --exclude go
 ```
 
-The local managed-toolchain state is runtime data, not public source. In particular, `.corulix-rust/` is excluded from the 1.0.0 publication set. See [`wht_docs/wht_publication_scope.md`](wht_docs/wht_publication_scope.md).
+The local managed-toolchain state is runtime data, not public source. In particular, `.corulix-rust/` is excluded from the publication set. See [`wht_docs/wht_publication_scope.md`](wht_docs/wht_publication_scope.md).
 
 ## Platform support
 
-The 1.0.0 release surface is qualified for Linux and native Windows.
+The Corulix 1.1.0 release surface is qualified for native Linux x86_64, native Windows x86_64, and a cross-built Linux ARM64 artifact.
 
-| Platform       | 1.0.0 distribution status                                                          |
-| -------------- | ---------------------------------------------------------------------------------- |
-| Linux x86_64   | Supported (native build, full test suite)                                          |
-| Linux ARM64    | Supported (cross-compiled build; native ARM64 runtime execution not yet performed) |
-| Windows x86_64 | Supported (native MSVC build, full test suite)                                     |
-| macOS x86_64   | Not part of the 1.0.0 binary distribution                                          |
-| macOS ARM64    | Not part of the 1.0.0 binary distribution                                          |
+| Platform       | 1.1.0 status                                                                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Linux x86_64   | Native build, full native workspace test suite, native runtime/CLI/MCP/config-policy verification                                                     |
+| Windows x86_64 | Native MSVC build, full native workspace test suite, PE32+/AMD64 binary-format certification, native runtime/CLI/MCP (14-tool)/config-policy verification |
+| Linux ARM64    | Real `aarch64-unknown-linux-gnu` binary built via the approved cross-compile path, architecture-verified. Runtime classification: **cross-compile build only** — native ARM64 runtime execution has not been performed and is not claimed |
+| macOS x86_64   | Not part of the 1.1.0 binary distribution                                                                                                              |
+| macOS ARM64    | Not part of the 1.1.0 binary distribution                                                                                                              |
 
-Source code may contain target-specific branches beyond the packaged 1.0.0 binary matrix; that does not constitute a release-support claim for an unqualified platform.
+Source code may contain target-specific branches beyond the packaged binary matrix; that does not constitute a release-support claim for an unqualified platform. Registry/publication availability (see [Installation](#installation)) is a separate question from release-candidate certification: this table describes what has been built and certified, not what is currently live on a public registry.
 
 ## Installation
 
-Corulix 1.0.0 uses three strictly-separated publication channels:
+Corulix uses three strictly-separated publication channels:
 
 - **GitHub** — the public **source repository only**. It contains the
   source tree, permanent regression tests, documentation, and build
@@ -211,9 +336,9 @@ Corulix 1.0.0 uses three strictly-separated publication channels:
   install through Cargo, which builds the real binary from source; no
   precompiled binary is shipped through this channel.
 
-### Build from the 1.0.0 source package
+### Build from source
 
-Obtain the official 1.0.0 source package, extract it, then run:
+Obtain the official 1.1.0 source package, extract it, then run:
 
 ```sh
 cargo build --release --locked --package corulix
@@ -223,7 +348,7 @@ cargo build --release --locked --package corulix
 Expected version:
 
 ```text
-1.0.0
+1.1.0
 ```
 
 The public source package does **not** require `vendor/`, `.corulix-rust/`, `release/`, or `target/`. Dependency resolution is defined by the Cargo manifests and `Cargo.lock`; an offline vendored source bundle, if ever offered, is a separate distribution artifact rather than part of the standard publication set.
@@ -236,7 +361,7 @@ The npm distribution name is:
 @whatalker/corulix
 ```
 
-When version `1.0.0` is available on the npm registry:
+When version `1.1.0` is available on the npm registry:
 
 ```sh
 npm install -g @whatalker/corulix
@@ -254,7 +379,7 @@ The Cargo package name is:
 corulix
 ```
 
-When version `1.0.0` is available on crates.io:
+When version `1.1.0` is available on crates.io:
 
 ```sh
 cargo install corulix
@@ -262,7 +387,7 @@ corulix --version
 corulix --help
 ```
 
-Registry availability is authoritative for whether a package version has actually been published — `cargo install corulix` resolves whatever the latest published version actually is. An earlier `0.1.0-alpha.2` line was published under the historical `GPL-3.0-only` terms; it is not the current 1.0.0 product and is not retroactively relicensed. To install that specific historical release explicitly:
+Registry availability is authoritative for whether a package version has actually been published — `cargo install corulix` resolves whatever the latest published version actually is. An earlier `0.1.0-alpha.2` line was published under the historical `GPL-3.0-only` terms; it is not the current 1.1.0 product and is not retroactively relicensed. To install that specific historical release explicitly:
 
 ```sh
 cargo install corulix --version 0.1.0-alpha.2
@@ -277,6 +402,10 @@ corulix workspace detect   [--workspace PATH | --workspace-file FILE]
 corulix workspace inspect  [--workspace PATH | --workspace-file FILE] [--workspace-root ROOT]
 corulix parse <FILE>       [--workspace PATH | --workspace-file FILE] [--workspace-root ROOT]
 corulix mcp stdio          [--workspace PATH | --workspace-file FILE]
+corulix config validate    [--workspace PATH | --workspace-file FILE]
+corulix config inspect     [--workspace PATH | --workspace-file FILE] [--workspace-root ROOT]
+corulix config schema
+corulix instructions generate [--workspace PATH | --workspace-file FILE] [--format agents|claude] [--write | --check]
 corulix setup              [--profile full|on-demand] [--only GROUP...] [--exclude GROUP...]
 ```
 
@@ -290,7 +419,7 @@ See [`wht_docs/wht_architecture.md`](wht_docs/wht_architecture.md) and [`wht_doc
 
 ## Public source scope
 
-The public 1.0.0 source set is defined by [`PACKAGE_MANIFEST.txt`](PACKAGE_MANIFEST.txt). The standard source publication intentionally excludes local/generated/private material including:
+The public 1.1.0 source set is defined by [`PACKAGE_MANIFEST.txt`](PACKAGE_MANIFEST.txt). The standard source publication intentionally excludes local/generated/private material including:
 
 ```text
 .corulix-rust/
@@ -314,6 +443,7 @@ See [`wht_docs/wht_publication_scope.md`](wht_docs/wht_publication_scope.md) for
 - [`wht_docs/wht_language_support.md`](wht_docs/wht_language_support.md) — language/provider capability matrix
 - [`wht_docs/wht_mcp_compatibility.md`](wht_docs/wht_mcp_compatibility.md) — MCP contract and tool surface
 - [`wht_docs/wht_cli.md`](wht_docs/wht_cli.md) — CLI reference
+- [`wht_docs/wht_workspace_json_config_reference.md`](wht_docs/wht_workspace_json_config_reference.md) — `WhaTalker_Corulix_JSON_Config.json` schema, authority model, and `corulix config` CLI reference (1.1.0)
 - [`wht_docs/wht_publication_scope.md`](wht_docs/wht_publication_scope.md) — public/private publication boundary
 - [`wht_docs/wht_releasing.md`](wht_docs/wht_releasing.md) — release preparation and publication gate
 - [`wht_docs/wht_testing.md`](wht_docs/wht_testing.md) — quality gates
@@ -325,7 +455,7 @@ See [`wht_docs/wht_publication_scope.md`](wht_docs/wht_publication_scope.md) for
 
 ## License
 
-Current 1.0.0 source is licensed under **AGPL-3.0-only**. See [`LICENSE`](LICENSE).
+Current 1.1.0 source is licensed under **AGPL-3.0-only**. See [`LICENSE`](LICENSE).
 
 The historical `0.1.0-alpha.2` release remains under its original `GPL-3.0-only` terms.
 

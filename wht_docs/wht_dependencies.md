@@ -42,7 +42,7 @@ Exact resolved transitive versions remain authoritative in `Cargo.lock`.
 
 ## Security-qualified TLS baseline
 
-The qualified 1.0.0 dependency state uses `rustls 0.23.45`, which resolves the `RUSTSEC-2026-0285` condition identified during release qualification. Dependency upgrades must not silently replace the frozen 1.0.0 release identity.
+The qualified dependency state (unchanged from 1.0.0 through 1.1.0) uses `rustls 0.23.45`, which resolves the `RUSTSEC-2026-0285` condition identified during release qualification. Dependency upgrades must not silently replace the frozen release identity.
 
 ## Ownership principles
 
@@ -55,7 +55,7 @@ The qualified 1.0.0 dependency state uses `rustls 0.23.45`, which resolves the `
 
 ## Vendor policy
 
-`vendor/` is **not part of the standard public 1.0.0 source publication**. It may exist locally as controlled dependency/build support, but public source consumers use the manifests and `Cargo.lock` unless a separate offline/vendored source artifact is explicitly published.
+`vendor/` is **not part of the standard public source publication**. It may exist locally as controlled dependency/build support, but public source consumers use the manifests and `Cargo.lock` unless a separate offline/vendored source artifact is explicitly published.
 
 Do not interpret deletion/exclusion of a local vendor cache as removal of dependency metadata from the product.
 

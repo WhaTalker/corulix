@@ -47,15 +47,22 @@
 //! code and `std::env::set_var` requires `unsafe` under edition 2024;
 //! `resolve_launch_at`'s `HOST_ONLY`/`CORULIX_MANAGED` resolution for this
 //! profile's `managed_interpreter` never reads ambient `PATH` in the first
-//! place, so the CWD-decoy and resolved-executable/real-image-path checks
-//! below are the only evidence that can exist here, and they are sufficient.
+//! place, so the CWD-decoy and resolved-executable checks below are the
+//! only evidence that can exist here, and they are sufficient.
 //!
-//! Real, independent verification throughout: `Get-CimInstance
-//! Win32_Process -Filter "ProcessId=$pid"` (the real OS process table)
-//! proves the actual image path of the spawned child, and a written
-//! sentinel file (echoed by the decoy scripts themselves) proves whether a
-//! decoy ever ran -- both together, mirroring the gopls Windows file's own
-//! evidence model.
+//! Real, independent verification throughout: a written sentinel file
+//! (echoed by the decoy scripts themselves) proves whether a decoy ever
+//! ran. (P17-W corrective P4: an earlier draft of this file also carried a
+//! `Get-CimInstance Win32_Process`-based live-image-path check, mirroring
+//! the gopls Windows file's own evidence model -- but `typescript_language_server_managed()`'s
+//! `ExecutionClass` is workspace-bound, so `LspSession::spawn` here always
+//! fails closed via `ManagedProcess::spawn_with_workspace_root` before any
+//! process, decoy or managed, is ever spawned; there is never a live child
+//! process whose image path that check could examine, unlike gopls's own
+//! non-workspace-bound profile. That check was removed as unreachable dead
+//! code rather than left as an orphaned, uncallable helper -- the sentinel
+//! check alone already proves the equivalent property, that no decoy ever
+//! executed, for this specific fail-closed contract.)
 //!
 //! Shares `real_typescript_6_managed_e2e.rs`'s provisioning shape
 //! (`provisioning::provision`/`provision_with_dependencies` against the real
@@ -72,7 +79,7 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use wht_corulix_config::{EffectiveConfig, HostConfig, RepositoryHints, RequestOptions};
 use wht_corulix_core::{CancellationToken, WorkspaceRootId};
@@ -80,7 +87,13 @@ use wht_corulix_lsp::{LspError, LspProviderProfile, LspSession};
 use wht_corulix_tooling::provisioning::{self, ManagedComponentState};
 use wht_corulix_workspace::WorkspaceRoot;
 
-const READINESS_TIMEOUT: Duration = Duration::from_secs(90);
+// P17-W corrective P4: an earlier draft of this file also declared a
+// `READINESS_TIMEOUT` constant for a `session.wait_until_ready(...)` call.
+// No such call exists in the test below -- the session never reaches a
+// spawned, ready state at all under the workspace-bound fail-closed
+// contract this file's own final assertion proves (see the module doc's
+// note on `real_process_image_path`'s identical removal) -- so it was
+// removed as an orphaned constant rather than left declared-but-unused.
 const NODE_ID: &str = "node-runtime";
 const TS6_ID: &str = "typescript-6-classic";
 
@@ -172,21 +185,6 @@ fn write_decoy(path: &Path, sentinel: &Path) {
     let script =
         format!("@echo off\r\necho invoked: %~f0 %* >> \"{sentinel_str}\"\r\nexit /b 0\r\n");
     let _ = fs::write(path, script);
-}
-
-/// Real, independent OS-level check via `Get-CimInstance Win32_Process` of
-/// the actual image path a live process is executing from.
-fn real_process_image_path(pid: u32) -> Option<String> {
-    let output = StdCommand::new("powershell")
-        .args([
-            "-NoProfile",
-            "-Command",
-            &format!("(Get-CimInstance Win32_Process -Filter \"ProcessId={pid}\").ExecutablePath"),
-        ])
-        .output()
-        .ok()?;
-    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if text.is_empty() { None } else { Some(text) }
 }
 
 /// A real two-file TS fixture, plus hostile `node.exe.bat`/`node.bat`

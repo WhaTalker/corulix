@@ -281,7 +281,7 @@ impl ContractRegistry {
         )?;
         insert(
             "workspace_info",
-            contract_no_input::<wht_corulix_core::WorkspaceInfo>("workspace_info")?,
+            contract_no_input::<crate::dto::WorkspaceInfoView>("workspace_info")?,
         )?;
         insert(
             "toolchain_status",

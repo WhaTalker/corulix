@@ -317,7 +317,17 @@ fn load_descriptor(
         }
     }
 
+    // Corulix 1.1.0 (ADR 0012): pin the descriptor's own containing
+    // directory as a real, canonicalized WorkspaceRoot -- the same
+    // validity check (`fs::canonicalize` + `is_dir()`) every member root
+    // already goes through -- so a later, safe descriptor-sibling read of
+    // `WhaTalker_Corulix_JSON_Config.json` can reuse the existing
+    // TOCTOU-safe `confined_read` machinery instead of a second primitive.
+    // Fails closed identically to any other root-validity failure if
+    // `descriptor_dir` no longer exists or isn't a directory.
+    let descriptor_location = WorkspaceRoot::open(&descriptor_dir)?;
     WorkspaceContext::from_roots(roots)
+        .map(|context| context.with_descriptor_location(descriptor_location))
 }
 
 fn finalize(

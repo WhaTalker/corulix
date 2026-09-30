@@ -25,7 +25,7 @@
 [package]
 name = "wht_corulix_process_fixture"
 description = "Test-only, cross-platform deterministic child-process fixture for Corulix process-primitive tests (never published, never a managed provider)"
-version.workspace = true
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

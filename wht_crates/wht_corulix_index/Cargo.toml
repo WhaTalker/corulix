@@ -5,7 +5,7 @@
 [package]
 name = "wht_corulix_index"
 description = "Snapshot and index state for WhaTalker Corulix"
-version.workspace = true
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

@@ -6,7 +6,7 @@ WhaTalker Corulix operates directly on software workspaces, so workspace authori
 
 ```text
 Product:  WhaTalker Corulix
-Version:  1.0.0
+Version:  1.1.0
 License:  AGPL-3.0-only
 ```
 
@@ -33,7 +33,7 @@ Corulix does not claim a dedicated public security mailbox or PGP workflow in th
 
 ## Windows fail-closed behavior
 
-Windows is a supported 1.0.0 platform. Some workspace-bound execution paths intentionally fail closed when the implementation cannot establish the required safe object/process binding. A pathname-only fallback is not claimed as an equivalent security boundary.
+Windows x86_64 is a supported platform, natively certified since 1.0.0 and re-certified for 1.1.0. Some workspace-bound execution paths intentionally fail closed when the implementation cannot establish the required safe object/process binding. A pathname-only fallback is not claimed as an equivalent security boundary.
 
 ## Managed toolchains
 

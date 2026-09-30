@@ -57,8 +57,7 @@ fn real_windows_rustup_toolchain_bin() -> Option<PathBuf> {
         return Some(PathBuf::from(explicit));
     }
     std::env::var_os("PATH")
-        .map(|path| std::env::split_paths(&path).find(|dir| dir.join("rustfmt.exe").is_file()))
-        .flatten()
+        .and_then(|path| std::env::split_paths(&path).find(|dir| dir.join("rustfmt.exe").is_file()))
 }
 /// The rustup shim directory -- listed second, never first, so a resolver
 /// walking `approved_system_directories` in order reaches the real
@@ -68,8 +67,7 @@ fn real_windows_cargo_shim_bin() -> Option<PathBuf> {
         return Some(PathBuf::from(explicit));
     }
     std::env::var_os("PATH")
-        .map(|path| std::env::split_paths(&path).find(|dir| dir.join("cargo.exe").is_file()))
-        .flatten()
+        .and_then(|path| std::env::split_paths(&path).find(|dir| dir.join("cargo.exe").is_file()))
 }
 
 fn real_rustfmt_available() -> bool {

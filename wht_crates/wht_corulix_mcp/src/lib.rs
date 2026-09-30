@@ -30,12 +30,13 @@
 mod capability_notes;
 mod contract_gate;
 pub mod dto;
+pub mod instructions;
 
 use dto::*;
 use rmcp::handler::server::common::schema_for_output;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ContentBlock, ProtocolVersion, ServerCapabilities, ServerInfo};
-use rmcp::{ServerHandler, ServiceExt, tool, tool_handler, tool_router, transport::stdio};
+use rmcp::{ServerHandler, ServiceExt, tool, tool_router, transport::stdio};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -82,6 +83,21 @@ pub struct CorulixMcpServer {
     /// `CorulixMcpServer` value reachable by any code path whose registry
     /// failed to compile.
     contract_registry: Arc<contract_gate::ContractRegistry>,
+    /// Corulix 1.1.0 (ADR 0012): this connection's effective MCP tool
+    /// exposure policy -- immutable for the process's lifetime, matching
+    /// [`Self::workspace_identity`]/[`Self::contract_registry`]'s own
+    /// once-resolved-never-reloaded lifecycle. Defaults to
+    /// [`wht_corulix_core::EffectiveToolSet::all_enabled`] (Corulix 1.0.0's
+    /// exact behavior) unless [`Self::with_tool_policy`] attaches a
+    /// workspace-authored, already-validated reduction. The **sole**
+    /// production consumer is [`Self::effective_tool_router`].
+    tool_policy: Arc<wht_corulix_core::EffectiveToolSet>,
+    /// Corulix 1.1.0 (ADR 0012, Phase G): whether [`Self::with_tool_policy`]
+    /// was ever called on this instance -- distinct from
+    /// `tool_policy.is_reduced()`, since an explicitly-authored policy that
+    /// happens to disable nothing is still "configured". The sole consumer
+    /// is [`Self::workspace_info`]'s `WorkspaceInfoView::tool_policy_configured`.
+    tool_policy_configured: bool,
 }
 
 impl CorulixMcpServer {
@@ -133,7 +149,65 @@ impl CorulixMcpServer {
             connection_id: ChangeSession::generate_connection_id()?,
             workspace_identity,
             contract_registry: Arc::new(contract_registry),
+            tool_policy: Arc::new(wht_corulix_core::EffectiveToolSet::all_enabled()),
+            tool_policy_configured: false,
         })
+    }
+
+    /// Corulix 1.1.0 (ADR 0012): attaches an already-validated tool
+    /// exposure policy to this server. Additive consuming builder --
+    /// mirrors [`Self::new_with_registry`]'s own fail-closed-at-startup
+    /// pattern exactly (a validation failure here means no `Self` value is
+    /// ever produced, so no `#[tool]` handler -- every one of which
+    /// requires `&self` -- can ever run against an invalid policy) and
+    /// never changes [`Self::new`]'s own public signature (a published,
+    /// crates.io API this crate must not break). Absent (no call to this
+    /// method), [`Self::tool_policy`] stays
+    /// [`wht_corulix_core::EffectiveToolSet::all_enabled`] -- Corulix
+    /// 1.0.0's exact behavior, unaffected.
+    pub fn with_tool_policy(
+        mut self,
+        policy: Result<
+            wht_corulix_core::EffectiveToolSet,
+            wht_corulix_core::ToolPolicyValidationError,
+        >,
+    ) -> wht_corulix_core::CorulixResult<Self> {
+        let policy = policy.map_err(|error| {
+            tracing::error!(
+                target: "wht_corulix_mcp::tool_policy",
+                %error,
+                "tool policy: validation failed at startup -- refusing to become ready"
+            );
+            wht_corulix_core::CorulixError::Internal
+        })?;
+        self.tool_policy = Arc::new(policy);
+        self.tool_policy_configured = true;
+        Ok(self)
+    }
+
+    /// Corulix 1.1.0 (ADR 0012): the **sole** production insertion point
+    /// for tool-exposure policy. Builds `Self::tool_router()`'s exact
+    /// compile-time-declared base (the same 14-tool set
+    /// `wht_scripts/wht_verify_architecture.py` Rule S counts, completely
+    /// unaffected by this method), then applies
+    /// [`rmcp::handler::server::router::tool::ToolRouter::disable_route`]
+    /// for every name [`Self::tool_policy`] disables -- an existing,
+    /// already-tested `rmcp` SDK mechanism, not new dispatch logic of this
+    /// crate's own. [`Self::list_tools`]/[`Self::call_tool`]/[`Self::get_tool`]
+    /// below all call this instead of the bare static router, so a
+    /// disabled tool is both invisible to discovery and rejected on direct
+    /// call before any handler body runs -- `ToolRouter::call`'s own
+    /// existing fail-closed behavior for a disabled name. When
+    /// [`Self::tool_policy`] is
+    /// [`wht_corulix_core::EffectiveToolSet::all_enabled`] (no workspace
+    /// policy configured), `disabled_names()` is empty, so this returns
+    /// byte-for-byte the same router `Self::tool_router()` alone would.
+    fn effective_tool_router(&self) -> rmcp::handler::server::router::tool::ToolRouter<Self> {
+        let mut router = Self::tool_router();
+        for name in self.tool_policy.disabled_names() {
+            router.disable_route(name);
+        }
+        router
     }
 
     /// Serializes `value` as an unconditionally successful structured tool
@@ -294,10 +368,16 @@ impl CorulixMcpServer {
             idempotent_hint = true,
             open_world_hint = false
         ),
-        output_schema = "schema_for_output::<wht_corulix_core::WorkspaceInfo>()"
+        output_schema = "schema_for_output::<WorkspaceInfoView>()"
     )]
     fn workspace_info(&self) -> CallToolResult {
-        self.plain_result("workspace_info", &self.engine.workspace_info())
+        let view = WorkspaceInfoView {
+            workspace: self.engine.workspace_info(),
+            canonical_tool_count: wht_corulix_core::EffectiveToolSet::canonical_tool_count(),
+            effective_visible_tool_count: self.tool_policy.effective_visible_tool_count(),
+            tool_policy_configured: self.tool_policy_configured,
+        };
+        self.plain_result("workspace_info", &view)
     }
 
     // ---------------------------------------------------------------
@@ -884,22 +964,85 @@ fn session_error_reason(error: &wht_corulix_engine::session::SessionError) -> Re
     error.reason_code()
 }
 
-#[tool_handler]
 impl ServerHandler for CorulixMcpServer {
     /// Phase 13: explicitly negotiates protocol version `2026-07-28` rather
     /// than relying on `ProtocolVersion::default()`/`LATEST` (which is
     /// `2025-11-25` in the admitted `rmcp` 3.0.1). Declares only the
     /// `tools` capability -- no `resources`, no `prompts`, no `logging`
     /// (left `None`), and no `experimental` extensions.
+    ///
+    /// Corulix 1.1.0 (ADR 0012, Phase D/J): the instructions text below
+    /// deliberately never asserts an exact tool count or names
+    /// `workspace_info` -- both `runtime_identity` and `workspace_info` are
+    /// individually downscopeable (Section 6.D of the plan; no
+    /// product-mandatory tool), so a caller must never be pointed at a
+    /// tool that could itself be hidden. Verified against
+    /// `capability_notes.rs`'s own banned-coaching-phrase list -- none of
+    /// "use ", "then ", "call ", "prefer ", "fall back", "afterward" appear;
+    /// "reachable only through" is the same factual-boundary language
+    /// already present and already approved in the prior 1.0.0 string.
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
             .with_protocol_version(ProtocolVersion::V_2026_07_28)
             .with_instructions(
-                "WhaTalker Corulix: 14 canonical governed tools over a read-only-by-default \
-                 workspace. Mutating operations (submit_edit, complete_change) are reachable \
-                 only through the begin_change -> submit_edit -> validate_change -> \
-                 complete_change ChangeSession lifecycle; there is no direct-write tool.",
+                "WhaTalker Corulix: up to 14 canonical governed tools over a \
+                 read-only-by-default workspace. One workspace per process. Mutating \
+                 operations are reachable only through the governed ChangeSession lifecycle \
+                 when the corresponding lifecycle tools are present; there is no direct-write \
+                 tool. The effective tool surface may be reduced by workspace policy and \
+                 never exceeds the canonical set.",
             )
+    }
+
+    /// Corulix 1.1.0 (ADR 0012): the **sole** production insertion point
+    /// for tool-exposure policy at the dispatch boundary. Hand-written
+    /// (not `#[tool_handler]`-generated) so it can call
+    /// [`CorulixMcpServer::effective_tool_router`] instead of the bare
+    /// `Self::tool_router()` the macro's own default expansion would use --
+    /// otherwise identical, byte-for-byte, to that generated code (compare
+    /// `rmcp-macros`' `tool_handler::tool_handler`'s own `call_tool`
+    /// template).
+    async fn call_tool(
+        &self,
+        request: rmcp::model::CallToolRequestParams,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::CallToolResponse, rmcp::ErrorData> {
+        let tcc = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
+        self.effective_tool_router().call(tcc).await
+    }
+
+    /// As [`Self::call_tool`]: hand-written so discovery reflects
+    /// [`CorulixMcpServer::effective_tool_router`] rather than the bare
+    /// compile-time-declared router -- a policy-disabled tool must be
+    /// **invisible** here, not merely rejected on call. Otherwise
+    /// byte-for-byte identical to `rmcp-macros`' own `list_tools`
+    /// template.
+    async fn list_tools(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
+        let supports_cache_hints = context
+            .protocol_version()
+            .is_some_and(|version| version >= rmcp::model::ProtocolVersion::V_2026_07_28);
+        Ok(rmcp::model::ListToolsResult {
+            result_type: Some(rmcp::model::ResultType::COMPLETE),
+            tools: self.effective_tool_router().list_all(),
+            meta: None,
+            next_cursor: None,
+            ttl_ms: supports_cache_hints.then_some(0),
+            cache_scope: supports_cache_hints.then_some(rmcp::model::CacheScope::Public),
+        })
+    }
+
+    /// As [`Self::call_tool`]/[`Self::list_tools`]: hand-written so a
+    /// policy-disabled tool's definition is never returned through this
+    /// path either (`ToolRouter::get` already returns `None` for a
+    /// disabled name -- this override only routes it through
+    /// [`CorulixMcpServer::effective_tool_router`] instead of the bare
+    /// static router).
+    fn get_tool(&self, name: &str) -> Option<rmcp::model::Tool> {
+        self.effective_tool_router().get(name).cloned()
     }
 }
 
@@ -909,11 +1052,15 @@ impl ServerHandler for CorulixMcpServer {
 /// for the MCP JSON-RPC stream -- any stray `println!`/log write to stdout
 /// elsewhere in the process would corrupt the protocol framing, which is why
 /// the CLI routes its own diagnostic output to stderr instead.
-pub async fn serve_stdio(
-    engine: Arc<CorulixEngine>,
-    workspace_identity: WorkspaceIdentity,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let server = CorulixMcpServer::new(engine, workspace_identity)?;
+/// Corulix 1.1.0 (ADR 0012): takes an already-constructed [`CorulixMcpServer`]
+/// -- including whatever [`CorulixMcpServer::with_tool_policy`] attached --
+/// rather than building a bare, default-policy server internally. This is
+/// what makes `corulix mcp stdio` and `corulix config validate`/`inspect`
+/// provably apply the exact same effective policy: the caller (`wht_corulix_cli::main::run_mcp_stdio`)
+/// resolves the workspace's own `WhaTalker_Corulix_JSON_Config.json` via the
+/// same [`wht_corulix_config::load_workspace_config`] both surfaces share,
+/// then constructs the server from that result before ever reaching here.
+pub async fn serve_stdio(server: CorulixMcpServer) -> Result<(), Box<dyn std::error::Error>> {
     let service = server.serve(stdio()).await?;
     service.waiting().await?;
     Ok(())
@@ -1250,6 +1397,144 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
+    // Corulix 1.1.0 (ADR 0012, Phase D): tool exposure policy.
+    // -----------------------------------------------------------------
+
+    /// TOOL-016: binds the single shared `wht_corulix_core` authority to
+    /// this crate's own compile-time-declared `#[tool(...)]` set -- the
+    /// bridge that keeps Rule S's compile-time count and the shared,
+    /// cross-crate-visible catalog from ever silently diverging.
+    #[test]
+    fn canonical_mcp_tool_names_match_the_declared_tool_router_exactly() {
+        let router = CorulixMcpServer::tool_router();
+        let declared: std::collections::BTreeSet<String> = router
+            .list_all()
+            .into_iter()
+            .map(|tool| tool.name.to_string())
+            .collect();
+        let canonical: std::collections::BTreeSet<String> =
+            wht_corulix_core::CANONICAL_MCP_TOOL_NAMES
+                .iter()
+                .map(|name| (*name).to_string())
+                .collect();
+        assert_eq!(
+            declared, canonical,
+            "wht_corulix_core::CANONICAL_MCP_TOOL_NAMES has drifted from the real #[tool(...)] set"
+        );
+    }
+
+    fn server_with_policy(
+        label: &str,
+        disabled: &[&str],
+        empty_catalog_supported: bool,
+    ) -> Result<CorulixMcpServer, String> {
+        let base = server(label).map_err(|error| error.to_string())?;
+        let disabled_tools: Vec<String> = disabled.iter().map(|name| (*name).to_string()).collect();
+        let policy =
+            wht_corulix_core::validate_tool_policy(&disabled_tools, empty_catalog_supported);
+        base.with_tool_policy(policy)
+            .map_err(|error| error.to_string())
+    }
+
+    #[test]
+    fn no_policy_preserves_all_14_tools_in_effective_router() -> Result<(), String> {
+        let srv = server("no-policy-configured").map_err(|error| error.to_string())?;
+        assert_eq!(srv.effective_tool_router().list_all().len(), 14);
+        Ok(())
+    }
+
+    #[test]
+    fn valid_reduced_policy_is_reflected_in_effective_router() -> Result<(), String> {
+        let srv = server_with_policy("reduced-policy", &["semantic", "format_preview"], false)?;
+        let router = srv.effective_tool_router();
+        assert_eq!(router.list_all().len(), 12);
+        assert!(router.is_disabled("semantic"));
+        assert!(router.is_disabled("format_preview"));
+        assert!(!router.is_disabled("search"));
+        Ok(())
+    }
+
+    #[test]
+    fn disabled_tool_is_absent_from_get_tool_but_others_remain() -> Result<(), String> {
+        let srv = server_with_policy("get-tool-hidden", &["semantic"], false)?;
+        assert!(srv.get_tool("semantic").is_none());
+        assert!(srv.get_tool("search").is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn unknown_tool_name_in_policy_fails_construction_closed() {
+        let result = server_with_policy("unknown-tool-name", &["delete_repo"], false);
+        assert!(
+            result.is_err(),
+            "an unrecognized tool name in disabledTools must refuse startup, never silently ignore"
+        );
+    }
+
+    #[test]
+    fn begin_change_disabled_alone_fails_construction_closed() {
+        let result = server_with_policy("mutation-family-incomplete", &["begin_change"], false);
+        assert!(
+            result.is_err(),
+            "begin_change disabled while downstream mutation tools remain enabled must refuse startup"
+        );
+    }
+
+    #[test]
+    fn all_six_mutation_tools_disabled_together_is_the_valid_read_only_mode() -> Result<(), String>
+    {
+        let srv = server_with_policy(
+            "read-only-mode",
+            &[
+                "begin_change",
+                "submit_edit",
+                "validate_change",
+                "change_status",
+                "complete_change",
+                "abort_change",
+            ],
+            false,
+        )?;
+        assert_eq!(srv.effective_tool_router().list_all().len(), 8);
+        Ok(())
+    }
+
+    #[test]
+    fn all_14_disabled_fails_when_empty_catalog_unsupported() {
+        let all: Vec<&str> = wht_corulix_core::CANONICAL_MCP_TOOL_NAMES.to_vec();
+        let result = server_with_policy("empty-catalog-unsupported", &all, false);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn all_14_disabled_succeeds_when_empty_catalog_supported() -> Result<(), String> {
+        let all: Vec<&str> = wht_corulix_core::CANONICAL_MCP_TOOL_NAMES.to_vec();
+        let srv = server_with_policy("empty-catalog-supported", &all, true)?;
+        assert_eq!(srv.effective_tool_router().list_all().len(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn two_independently_configured_servers_never_leak_policy() -> Result<(), String> {
+        let reduced = server_with_policy("no-leak-reduced", &["semantic"], false)?;
+        let full = server("no-leak-full").map_err(|error| error.to_string())?;
+        assert_eq!(reduced.effective_tool_router().list_all().len(), 13);
+        assert_eq!(full.effective_tool_router().list_all().len(), 14);
+        Ok(())
+    }
+
+    #[test]
+    fn bare_tool_router_stays_policy_blind_at_14_regardless_of_any_instance_policy()
+    -> Result<(), String> {
+        // Confirms the dual-layer separation this design relies on: the
+        // canonical, compile-time-declared router (Rule S's own domain) is
+        // never affected by any instance's configured policy.
+        let _srv = server_with_policy("policy-blind-canonical-check", &["semantic"], false)?;
+        assert_eq!(CorulixMcpServer::tool_router().list_all().len(), 14);
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------
     // 1a-i. Capability-Aware Tool Routing plan (Option B): per-tool and
     //       aggregate static description-byte gates, always-run (not
     //       `#[ignore]`d), measuring the REAL live `tools/list` UTF-8
@@ -1503,7 +1788,69 @@ mod tests {
         let server = server("workspace-info")?;
         let result = server.workspace_info();
         assert_eq!(result.is_error, Some(false));
-        assert_eq!(structured(&result)["read_only"], serde_json::json!(true));
+        let content = structured(&result);
+        assert_eq!(content["read_only"], serde_json::json!(true));
+        // Corulix 1.1.0 (ADR 0012, Phase G): count-only tool-policy
+        // introspection fields, unconfigured default.
+        assert_eq!(content["canonical_tool_count"], serde_json::json!(14));
+        assert_eq!(
+            content["effective_visible_tool_count"],
+            serde_json::json!(14)
+        );
+        assert_eq!(content["tool_policy_configured"], serde_json::json!(false));
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_info_reports_configured_reduced_policy() -> Result<(), String> {
+        let srv = server_with_policy("workspace-info-reduced", &["semantic"], false)?;
+        let result = srv.workspace_info();
+        assert_eq!(result.is_error, Some(false));
+        let content = structured(&result);
+        assert_eq!(content["canonical_tool_count"], serde_json::json!(14));
+        assert_eq!(
+            content["effective_visible_tool_count"],
+            serde_json::json!(13)
+        );
+        assert_eq!(content["tool_policy_configured"], serde_json::json!(true));
+        Ok(())
+    }
+
+    /// Corulix 1.1.0 (ADR 0012, Phase J): `get_info()`'s instructions text
+    /// was updated in Phase D to stay accurate under a reduced tool policy
+    /// (no hardcoded "14" claim, no `workspace_info`-referencing coaching
+    /// text). This test locks that in mechanically, mirroring
+    /// `capability_notes.rs`'s own "prove it with a test, not just a
+    /// comment" discipline, rather than leaving Phase J's requirement
+    /// verified only by manual inspection.
+    #[test]
+    fn get_info_instructions_reflect_reduced_policy_without_coaching()
+    -> wht_corulix_core::CorulixResult<()> {
+        let srv = server("get-info-text")?;
+        let info = srv.get_info();
+        let instructions = info.instructions.unwrap_or_default();
+        assert!(
+            instructions.contains("reduced by workspace policy"),
+            "get_info() instructions do not reflect the reduced-policy wording: {instructions:?}"
+        );
+        assert!(
+            !instructions.contains("workspace_info"),
+            "get_info() instructions must not reference workspace_info: {instructions:?}"
+        );
+        let lower = instructions.to_lowercase();
+        for phrase in [
+            "use ",
+            "then ",
+            "call ",
+            "prefer ",
+            "fall back",
+            "fallback to",
+        ] {
+            assert!(
+                !lower.contains(phrase),
+                "get_info() instructions contain a coaching phrase ({phrase:?}): {instructions:?}"
+            );
+        }
         Ok(())
     }
 
@@ -3534,15 +3881,29 @@ mod tests {
     /// Fixed by isolating the *root* instead of guarding a live mutation:
     /// this workspace forbids `unsafe` code (`std::env::set_var` is
     /// `unsafe fn` under the pinned toolchain), so this test process cannot
-    /// set `XDG_DATA_HOME` on itself. It re-execs this exact, already-
-    /// compiled test binary as a real child process (via
+    /// set the relevant environment variable on itself. It re-execs this
+    /// exact, already-compiled test binary as a real child process (via
     /// `std::env::current_exe()` + libtest's own `--exact` filter) with
-    /// `XDG_DATA_HOME` pointed at a fresh, guaranteed-empty isolated
+    /// that variable pointed at a fresh, guaranteed-empty isolated
     /// directory -- the same established pattern already used by
     /// `real_ts6_hostile_environment_behavioral_e2e`
     /// (`wht_corulix_lsp/tests/real_ts6_final_residual_certification_e2e.rs`).
     /// Inside that isolated root rustfmt can never already be owned, so the
     /// entire uninstall-then-restore dance is no longer needed at all.
+    ///
+    /// P17-W corrective P5: `managed_toolchain_root()` resolves via a
+    /// different environment variable per host OS (`provisioning.rs`) --
+    /// `XDG_DATA_HOME` only on non-macOS Unix, `LOCALAPPDATA`/`APPDATA` on
+    /// Windows, `HOME` on macOS. The original fix above set only
+    /// `XDG_DATA_HOME`, which correctly isolates on Linux but has zero
+    /// effect on Windows: there, the "isolated" child silently resolved
+    /// `managed_toolchain_root()` to the real, shared, machine-wide root
+    /// instead, so this test observed whatever rustfmt state that host
+    /// already had provisioned (a real `GLOBAL_STATE_DEPENDENCY`, not this
+    /// test's intended fresh-and-empty precondition). Also setting
+    /// `LOCALAPPDATA` closes that gap on Windows; harmless to set on every
+    /// other platform, since each OS's own branch reads only its own
+    /// variable.
     const F4_FORMAT_GATE_CHILD_TRIGGER: &str = "CORULIX_F4_FORMAT_GATE_CHILD";
 
     /// §12/§24: `FORMAT_PROVIDER_UNAVAILABLE_FALSE_PASS_COUNT=0`. A session
@@ -3565,6 +3926,7 @@ mod tests {
                 ])
                 .env(F4_FORMAT_GATE_CHILD_TRIGGER, "1")
                 .env("XDG_DATA_HOME", &isolated_xdg_data_home)
+                .env("LOCALAPPDATA", &isolated_xdg_data_home)
                 .output()
                 .await
                 .map_err(|error| wht_corulix_core::CorulixError::InvalidInput(error.to_string()))?;

@@ -5,7 +5,7 @@
 [package]
 name = "wht_corulix_search"
 description = "Sole owner of the embedded ripgrep-family textual search provider for WhaTalker Corulix"
-version.workspace = true
+version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

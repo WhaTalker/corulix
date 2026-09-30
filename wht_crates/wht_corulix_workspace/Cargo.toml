@@ -5,7 +5,7 @@
 [package]
 name = "wht_corulix_workspace"
 description = "Sole owner of workspace canonicalization, path confinement, confined traversal, and root discovery for WhaTalker Corulix"
-version.workspace = true
+version = "1.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

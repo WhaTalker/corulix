@@ -24,7 +24,11 @@ members = [
 ]
 
 [workspace.package]
-version = "1.0.0"
+# CORULIX_1_1_0_A0: version moved out of workspace-wide inheritance.
+# Corulix now uses SELECTIVE_SEMVER_WITH_DEPENDENCY_CLOSURE (owner-mandated,
+# see the 1.1.0 implementation plan) -- each publishable crate declares its
+# own explicit `version` in its own [package] section; none inherit a shared
+# workspace package version anymore.
 edition = "2024"
 rust-version = "1.97.1"
 license = "AGPL-3.0-only"

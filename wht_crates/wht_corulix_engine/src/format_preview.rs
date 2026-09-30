@@ -147,7 +147,7 @@ impl CorulixEngine {
             root: wht_corulix_core::WorkspaceRootId(0),
             relative_path: relative.to_string_lossy().into_owned(),
         };
-        let effective = self.effective_config();
+        let effective = self.effective_config(self.root_id_for(&root));
         let cancellation = wht_corulix_core::CancellationToken::new();
 
         let result = wht_corulix_formatter::format_preview_at(
