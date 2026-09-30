@@ -2,6 +2,21 @@
 
 This changelog is release-oriented. It records externally meaningful product changes and intentionally excludes temporary qualification logs, benchmark transcripts, scratch paths, local machine details, and internal decision IDs.
 
+## 1.1.0
+
+Corulix 1.1.0 is a backward-compatible MINOR release (see `wht_docs/wht_adr/wht_0012-corulix-1-1-0-workspace-config-and-tool-policy.md`). Native Linux x86_64, native Windows x86_64, and cross-built Linux ARM64 artifacts are all built, tested, and certified. Publication (GitHub/crates.io/npm) remains a separate, explicitly-gated lifecycle stage — see [Installation](README.md#installation) for how to check current registry availability.
+
+### Added
+
+- **Workspace JSON configuration.** An optional, workspace-scoped, non-privileged `WhaTalker_Corulix_JSON_Config.json`, read only from its canonical fixed location. It can narrow (never widen) the effective MCP tool set and provider-category availability, with per-root overrides. An absent file reproduces Corulix 1.0.0's exact behavior. See `wht_docs/wht_workspace_json_config_reference.md`.
+- **Reduce-only MCP tool exposure policy.** All 14 canonical tools, including `runtime_identity` and `workspace_info`, are individually downscopeable via `toolPolicy.disabledTools`, subject to mutation-lifecycle dependency rules that keep a policy internally consistent. There is no product-mandatory tool. A disabled tool is both invisible to `tools/list` discovery and rejected on direct invocation.
+- **`corulix config` CLI.** `config validate`, `config inspect [--workspace-root]`, and `config schema` — all zero-mutation, sharing the exact same structural/semantic validator the MCP server itself uses at startup, so CLI validation and MCP construction can never disagree.
+- **`workspace_info` count-only tool-policy introspection.** `canonical_tool_count`, `effective_visible_tool_count`, and `tool_policy_configured` fields, carried on a new wrapper type so the published `WorkspaceInfo` type itself was never modified. Never reveals which specific tools are disabled.
+
+### Changed
+
+- Crate versioning moved from workspace-wide inherited (`version.workspace = true`) to explicit per-crate declarations (`SELECTIVE_SEMVER_WITH_DEPENDENCY_CLOSURE`): the directly-affected crates (`wht_corulix_core`, `wht_corulix_config`, `wht_corulix_workspace`, `wht_corulix_engine`, `wht_corulix_mcp`, `corulix`) report `1.1.0`; unaffected publishable crates remain explicitly pinned at `1.0.0`.
+
 ## 1.0.0
 
 Corulix 1.0.0 is the first complete enterprise baseline of the current architecture and the current source identity under `AGPL-3.0-only`.

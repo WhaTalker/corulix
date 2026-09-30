@@ -28,6 +28,29 @@
 //! reason (offline sandbox, registry outage), rather than fabricating a
 //! result.
 
+// Windows note (M09/D96): `#![cfg(unix)]`-only for this whole file --
+// `LspSession::spawn` (this file's own `start_provider` helper) always
+// routes through `wht_corulix_tooling::ManagedProcess::spawn_with_workspace_root`
+// -- see that function's own doc comment: "On Windows,
+// `spawn_with_workspace_root` fails closed before any process is spawned
+// (no `fchdir`-equivalent primitive exists there to preserve object-bound
+// cwd across `exec`) -- an LSP session can never be created against a
+// workspace on Windows via this path." This is the same accepted,
+// `FINAL_CLOSED` M09 contract already on record for workspace-bound LSP
+// sessions ("Windows: workspace-bound LSP UNAVAILABLE_FAIL_CLOSED, zero
+// provider spawn") -- not a defect this test exists to catch, and not
+// something a Windows variant can meaningfully exercise via this same
+// `LspSession::spawn` entry point (there is no second, non-workspace-root-
+// bound public spawn path to fall back to).
+// `P7B_D_WINDOWS_SHARED_NODE_LSP_EQUIVALENT_COUNT=0`. This file's sole test
+// previously carried its own per-test `#[cfg(unix)]`, which left every
+// shared helper/fixture/constant dead code on non-Unix targets once its
+// only caller was no longer compiled there (P17-W corrective P2); gating
+// the whole file matches this crate's own established convention for the
+// same defect class (see e.g. `real_typescript_7_native_e2e.rs`,
+// `real_ts6_adversarial_e2e.rs`).
+#![cfg(unix)]
+
 use std::error::Error;
 use std::fmt;
 use std::fs;
@@ -203,21 +226,6 @@ async fn ensure_provisioned(root: &std::path::Path) -> bool {
     true
 }
 
-// Windows note (M09/D96): `#[cfg(unix)]`-only. `LspSession::spawn` (this
-// file's own `start_provider` helper) always routes through
-// `wht_corulix_tooling::ManagedProcess::spawn_with_workspace_root` -- see
-// that function's own doc comment: "On Windows, `spawn_with_workspace_root`
-// fails closed before any process is spawned (no `fchdir`-equivalent
-// primitive exists there to preserve object-bound cwd across `exec`) -- an
-// LSP session can never be created against a workspace on Windows via this
-// path." This is the same accepted, `FINAL_CLOSED` M09 contract already on
-// record for workspace-bound LSP sessions ("Windows: workspace-bound LSP
-// UNAVAILABLE_FAIL_CLOSED, zero provider spawn") -- not a defect this test
-// exists to catch, and not something a Windows variant can meaningfully
-// exercise via this same `LspSession::spawn` entry point (there is no
-// second, non-workspace-root-bound public spawn path to fall back to).
-// `P7B_D_WINDOWS_SHARED_NODE_LSP_EQUIVALENT_COUNT=0`.
-#[cfg(unix)]
 #[tokio::test]
 async fn real_p7b_d_shared_node_runtime_two_simultaneous_dependents_e2e()
 -> Result<(), Box<dyn Error>> {

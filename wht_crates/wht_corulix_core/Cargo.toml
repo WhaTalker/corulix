@@ -5,7 +5,7 @@
 [package]
 name = "wht_corulix_core"
 description = "Protocol-agnostic domain contracts for WhaTalker Corulix"
-version.workspace = true
+version = "1.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

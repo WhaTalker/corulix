@@ -1022,7 +1022,8 @@ impl CorulixEngine {
             return ValidateChangeOutcome::NotRequired;
         }
 
-        let effective = self.effective_config();
+        let effective =
+            self.effective_config(self.root_id_for(session.executor().workspace_root()));
         let managed_root = match wht_corulix_tooling::provisioning::managed_toolchain_root() {
             Ok(root) => root,
             Err(_) => {
@@ -1249,7 +1250,8 @@ impl CorulixEngine {
             return ValidateChangeOutcome::NotRequired;
         }
 
-        let effective = self.effective_config();
+        let effective =
+            self.effective_config(self.root_id_for(session.executor().workspace_root()));
         let managed_root = match wht_corulix_tooling::provisioning::managed_toolchain_root() {
             Ok(root) => root,
             Err(_) => {
@@ -1467,7 +1469,8 @@ impl CorulixEngine {
             return ValidateChangeOutcome::NotRequired;
         }
 
-        let effective = self.effective_config();
+        let effective =
+            self.effective_config(self.root_id_for(session.executor().workspace_root()));
         let managed_root = match wht_corulix_tooling::provisioning::managed_toolchain_root() {
             Ok(root) => root,
             Err(_) => {
@@ -1692,7 +1695,8 @@ impl CorulixEngine {
             return ValidateChangeOutcome::NotRequired;
         }
 
-        let effective = self.effective_config();
+        let effective =
+            self.effective_config(self.root_id_for(session.executor().workspace_root()));
         let workspace_root = session.executor().workspace_root().clone();
 
         // Resolved once, up front: both the managed-first Pyright CLI
@@ -1926,7 +1930,7 @@ mod tests {
         let workspace_root = wht_corulix_workspace::WorkspaceRoot::open(&root_dir)?;
         let context = WorkspaceContext::single_root(workspace_root.clone(), "root".to_string());
         let engine = CorulixEngine::open(context);
-        assert!(!engine.effective_config().is_execution_class_allowed(
+        assert!(!engine.effective_config(None).is_execution_class_allowed(
             wht_corulix_core::ExecutionClass::TrustedWorkspaceExecution
         ));
 

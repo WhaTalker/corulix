@@ -16,21 +16,43 @@ use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::OnceLock;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
+// P17-W corrective P7: this file is genuinely mixed-platform (4
+// platform-neutral tests already pass on native Windows today:
+// real_p12_untrusted_execution_never_runs_test_binary_e2e,
+// real_p12_secret_env_inner_check,
+// real_p12_required_provider_unavailable_fails_closed_e2e,
+// real_p12_r2_managed_gnu_runtime_unavailable_fails_closed_e2e -- the last
+// two already contain their own established #[cfg(target_os = "windows")]
+// CROSS_PLATFORM_WITH_WINDOWS_FAIL_CLOSED_EXPECTATION pattern), so no
+// file-level #![cfg(unix)] is used here. Every item below is gated
+// per-item because it is exclusively used by this file's Unix-only tests
+// (each already individually #[cfg(unix)]-gated).
+#[cfg(unix)]
+use std::time::{Duration, Instant};
 
+use wht_corulix_core::CancellationToken;
+#[cfg(unix)]
 use wht_corulix_core::{
-    CancellationToken, ConnectionId, EvidenceProvenance, EvidenceResultSummary, EvidenceTimestamp,
-    GateId, OperationIntent, ProviderAvailability, ProviderCategory, ReasonCode, WorkspaceIdentity,
+    ConnectionId, EvidenceProvenance, EvidenceResultSummary, EvidenceTimestamp, GateId,
+    OperationIntent, ProviderAvailability, ProviderCategory, ReasonCode, WorkspaceIdentity,
 };
+#[cfg(unix)]
 use wht_corulix_engine::diagnostics::run_cargo_check;
+#[cfg(unix)]
 use wht_corulix_engine::planning::plan_operation;
+#[cfg(unix)]
 use wht_corulix_engine::policy::TargetScope;
+#[cfg(unix)]
 use wht_corulix_engine::providers::ProviderSnapshot;
+#[cfg(unix)]
 use wht_corulix_engine::session::{ChangeSession, SessionScope};
-use wht_corulix_engine::testing::{
-    RustTestError, TestExecutionLimits, run_cargo_test, run_cargo_test_with_limits,
-};
+use wht_corulix_engine::testing::{RustTestError, run_cargo_test};
+#[cfg(unix)]
+use wht_corulix_engine::testing::{TestExecutionLimits, run_cargo_test_with_limits};
+#[cfg(unix)]
 use wht_corulix_mutation::MutationExecutor;
+#[cfg(unix)]
 use wht_corulix_tooling::ProcessLimits;
 #[cfg(not(target_os = "windows"))]
 use wht_corulix_tooling::managed_runtimes::{
@@ -127,6 +149,7 @@ fn diagnostics_runtime_host_native() -> ManagedComponentManifest {
     }
 }
 use wht_corulix_tooling::provisioning::{self, ManagedComponentState};
+#[cfg(unix)]
 use wht_corulix_workspace::WorkspaceRoot;
 
 #[derive(Debug)]
@@ -324,6 +347,7 @@ fn write_secret_marker_fixture(dir: &std::path::Path) -> std::io::Result<()> {
 /// is terminated, whether the heartbeat's own mtime stops advancing --
 /// real, non-vacuous proof the descendant actually died rather than merely
 /// that `run_cargo_test`'s own future resolved.
+#[cfg(unix)]
 fn write_hang_fixture(
     dir: &std::path::Path,
     heartbeat_path: &std::path::Path,
@@ -358,6 +382,7 @@ fn write_hang_fixture(
 /// is passed, which this module's `run_cargo_test` does not pass) -- a
 /// passing variant of this fixture would produce almost no real stdout
 /// regardless of how much it `println!`s, making the fixture vacuous.
+#[cfg(unix)]
 fn write_huge_stdout_fixture(dir: &std::path::Path) -> std::io::Result<()> {
     fs::create_dir_all(dir.join("src"))?;
     fs::write(
@@ -376,6 +401,7 @@ fn write_huge_stdout_fixture(dir: &std::path::Path) -> std::io::Result<()> {
 /// small -- proving stderr bounding does not deadlock the child or corrupt
 /// stdout-based classification, unlike [`write_huge_stdout_fixture`] which
 /// deliberately does affect the summary line.
+#[cfg(unix)]
 fn write_huge_stderr_small_stdout_fixture(dir: &std::path::Path) -> std::io::Result<()> {
     fs::create_dir_all(dir.join("src"))?;
     fs::write(
@@ -395,6 +421,7 @@ fn write_huge_stderr_small_stdout_fixture(dir: &std::path::Path) -> std::io::Res
 /// [`RustTestError::WorkspaceSelfMutationDetected`]. Deliberately never run
 /// against Corulix's own working source tree -- always a disposable temp
 /// fixture (see `temp_dir`).
+#[cfg(unix)]
 fn write_self_mutating_fixture(dir: &std::path::Path) -> std::io::Result<()> {
     fs::create_dir_all(dir.join("src"))?;
     fs::write(

@@ -231,6 +231,38 @@ impl PinnedTarget {
         })
     }
 
+    /// Same open as [`Self::open_raw`], except a genuinely absent leaf
+    /// (`ENOENT`) is reported as `Ok(None)` instead of being collapsed into
+    /// the same generic `PathDenied` every other failure produces. Every
+    /// other error (permission denied, not a directory in an ancestor,
+    /// etc.) still fails closed as `Err(PathDenied)` -- absence is the only
+    /// outcome ever treated as "safe to proceed with defaults".
+    ///
+    /// Corulix 1.1.0 (ADR 0012): the sole caller is `confine.rs`'s
+    /// `confined_read_optional_blocking`, which needs this exact
+    /// distinction to implement `WorkspaceConfigError::NotPresent` vs
+    /// `PathDenied` for the optional `WhaTalker_Corulix_JSON_Config.json`
+    /// file -- reusing `entry_exists_no_follow`'s own errno-matching
+    /// discipline, applied here to the real data-bearing open rather than
+    /// a pure existence probe.
+    pub(crate) fn open_raw_or_absent(&self) -> CorulixResult<Option<PinnedFile>> {
+        match rustix::fs::openat(
+            self.parent_fd.as_fd(),
+            self.leaf.as_os_str(),
+            rustix::fs::OFlags::RDONLY
+                | rustix::fs::OFlags::NONBLOCK
+                | rustix::fs::OFlags::NOFOLLOW
+                | rustix::fs::OFlags::CLOEXEC,
+            rustix::fs::Mode::empty(),
+        ) {
+            Ok(owned) => Ok(Some(PinnedFile {
+                file: fs::File::from(owned),
+            })),
+            Err(err) if err == rustix::io::Errno::NOENT => Ok(None),
+            Err(_) => Err(CorulixError::PathDenied),
+        }
+    }
+
     /// Opens the bound entry for reading. Requires it be a regular file
     /// (Section 10) -- a directory or other special file is rejected here,
     /// never silently treated as readable content. `O_NOFOLLOW` (inherited

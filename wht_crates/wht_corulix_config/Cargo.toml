@@ -5,7 +5,7 @@
 [package]
 name = "wht_corulix_config"
 description = "Sole owner of workspace trust authorization, the HOST_ONLY/REPOSITORY_HINT/REQUEST_SCOPED configuration merge model, and canonical async-first provider resolution for WhaTalker Corulix"
-version.workspace = true
+version = "1.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -17,8 +17,18 @@ readme.workspace = true
 publish = ["crates-io"]
 
 [dependencies]
-wht_corulix_core.workspace = true
-wht_corulix_workspace.workspace = true
+# Corulix 1.1.0 (ADR 0012, Phase M): this crate's own `workspace_config`
+# module (Phases B/C) consumes 1.1.0-only API from both --
+# `wht_corulix_core::{EffectiveToolSet, validate_tool_policy, ToolPolicyValidationError,
+# CANONICAL_MCP_TOOL_NAMES}` and `wht_corulix_workspace::{confined_read_optional,
+# WorkspaceContext::descriptor_location, WorkspaceContext::resolve_root_id_by_canonical_path}`
+# -- an explicit `version = "1.1.0"` override (not the shared
+# `[workspace.dependencies]` entry, left at `1.0.0` for this same crate's
+# OWN other, unaffected consumers like `wht_corulix_formatter`/`wht_corulix_lsp`,
+# which only use this crate's pre-1.1.0 `HostConfig`/`RepositoryHints`/
+# `resolve_provider` API and genuinely need nothing newer).
+wht_corulix_core = { path = "../wht_corulix_core", version = "1.1.0" }
+wht_corulix_workspace = { path = "../wht_corulix_workspace", version = "1.1.0" }
 tokio.workspace = true
 # F1: `serde` was already present in `Cargo.lock` (transitively, via
 # `wht_corulix_core`'s own `Serialize`/`Deserialize` derives on
@@ -33,6 +43,32 @@ serde.workspace = true
 # admission comment on this pin for the full rationale and transitive
 # surface this makes direct for `hostfile.rs`'s real TOML parsing.
 toml.workspace = true
+# Corulix 1.1.0 (ADR 0012): `serde_json` was already present in
+# `Cargo.lock` transitively (via `schemars`/`rmcp` elsewhere in this
+# workspace) before this pin -- admits no new supply-chain surface, only
+# makes it direct so `workspace_config.rs` can parse the real
+# `WhaTalker_Corulix_JSON_Config.json` format directly into named structs
+# (never through a `serde_json::Value` intermediate, per that module's own
+# anti-duplicate-key design).
+serde_json.workspace = true
+# Corulix 1.1.0 (ADR 0012, Phase F): `schemars` was already present in
+# `Cargo.lock` transitively (via `wht_corulix_core`/`wht_corulix_engine`'s
+# own derives) before this pin -- admits no new supply-chain surface, only
+# makes it direct so `workspace_config.rs`'s strict v1 structs can derive a
+# real `JsonSchema` for `corulix config schema`'s emitted output, instead of
+# `wht_corulix_cli` hand-maintaining a parallel shadow schema that could
+# drift from the actual loader shape.
+schemars.workspace = true
+
+[dev-dependencies]
+# Corulix 1.1.0 (ADR 0012, Phase F): test-only -- proves
+# `workspace_config_json_schema()`'s emitted schema never silently
+# diverges from the real loader's own accept/reject behavior
+# (`schema_agrees_with_real_loader_*` tests). Same admitted, pinned
+# `=0.54.0` version already used elsewhere in this workspace for the
+# Contract Validation Gate; never a production/release dependency of this
+# crate.
+jsonschema.workspace = true
 
 [lints]
 workspace = true

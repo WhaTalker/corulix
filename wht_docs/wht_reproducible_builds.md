@@ -6,7 +6,7 @@ Corulix aims for reproducible release artifacts where practical and, at minimum,
 
 ## Source identity without Git
 
-The 1.0.0 reproducibility model does not require a Git checkout or commit identity. Record at least:
+The reproducibility model does not require a Git checkout or commit identity. Record at least:
 
 - `VERSION`;
 - `PACKAGE_MANIFEST.txt`;

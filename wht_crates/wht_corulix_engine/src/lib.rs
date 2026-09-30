@@ -202,6 +202,18 @@ pub struct CorulixEngine {
     /// [`Self::trusted`] and are never read from this value, so a host
     /// cannot smuggle a trust elevation in through a provider-path field.
     host_provider_authority: wht_corulix_config::HostConfig,
+    /// Corulix 1.1.0 (ADR 0012): the already-loaded, already-bound
+    /// `WhaTalker_Corulix_JSON_Config.json` for this workspace, if one was
+    /// found and validated. `None` means: no config file present, or the
+    /// caller (`wht_corulix_cli::main`) has not yet attached one via
+    /// [`Self::with_workspace_config`] -- both cases behave identically to
+    /// Corulix 1.0.0 (all `ProviderCategory`s enabled, subject only to
+    /// `Self::host_provider_authority`). Attaching this never happens
+    /// inside a constructor (loading/binding it is an async filesystem
+    /// operation; every `Self::open*` constructor here remains
+    /// synchronous, a published, crates.io API this crate must not break) --
+    /// only via the additive builder method.
+    workspace_config: Option<wht_corulix_config::BoundWorkspaceConfig>,
     /// Phase 13 item 3: this engine's own cached, real, ready Rust
     /// `wht_corulix_lsp::LspSession`, lazily spawned on first `semantic`
     /// call and reused thereafter (spawning/readying rust-analyzer per call
@@ -302,6 +314,7 @@ impl CorulixEngine {
             index: Arc::new(IndexStore::default()),
             trusted,
             host_provider_authority,
+            workspace_config: None,
             rust_lsp_session: tokio::sync::Mutex::new(None),
             go_lsp_session: tokio::sync::Mutex::new(None),
             typescript_lsp_session: tokio::sync::Mutex::new(None),
@@ -311,13 +324,42 @@ impl CorulixEngine {
         }
     }
 
+    /// Attaches an already-loaded, already-bound Corulix 1.1.0
+    /// `WhaTalker_Corulix_JSON_Config.json` (ADR 0012) to this engine.
+    /// Additive consuming builder -- matches the exact chainable style
+    /// [`Self::open`]/[`Self::open_with_trust`]/[`Self::open_with_host_config`]
+    /// already use, and never changes any of their own signatures (published,
+    /// crates.io APIs this crate must not break). Loading/binding the
+    /// config file is the caller's own async responsibility
+    /// (`wht_corulix_cli::main`, via `wht_corulix_config::{parse_workspace_config,
+    /// bind_workspace_config_roots}`) -- this engine performs no filesystem
+    /// I/O of its own to obtain it.
+    #[must_use]
+    pub fn with_workspace_config(
+        mut self,
+        config: wht_corulix_config::BoundWorkspaceConfig,
+    ) -> Self {
+        self.workspace_config = Some(config);
+        self
+    }
+
     /// Derives this engine's [`wht_corulix_config::EffectiveConfig`] from
-    /// its own [`Self::trusted`] flag -- the sole, crate-internal source of
-    /// trust configuration `validate_change` reads. No repository hints or
-    /// per-request options are modeled yet (both default), matching this
-    /// phase's narrow scope: authorizing (or not) real `cargo check`/
-    /// `cargo clippy` invocation, nothing else.
-    pub(crate) fn effective_config(&self) -> wht_corulix_config::EffectiveConfig {
+    /// its own [`Self::trusted`] flag and, as of Corulix 1.1.0 (ADR 0012),
+    /// its optionally-attached [`Self::workspace_config`]'s `defaults`
+    /// narrowing plus `root`'s own override narrowing, if `root` is
+    /// `Some` and names a root the workspace config actually overrides.
+    ///
+    /// `root` distinguishes a root-scoped operation (pass the real
+    /// `WorkspaceRootId` the operation is confined to) from a
+    /// workspace-wide summary (pass `None`, which applies `defaults` only
+    /// -- **never** a guessed root). Absent [`Self::workspace_config`]
+    /// (no file present, or the caller has not attached one) behaves
+    /// byte-for-byte identically to Corulix 1.0.0: `RepositoryHints::default()`,
+    /// unaffected by `root`.
+    pub(crate) fn effective_config(
+        &self,
+        root: Option<wht_corulix_core::WorkspaceRootId>,
+    ) -> wht_corulix_config::EffectiveConfig {
         // The provider-authority envelope contributes provider paths and
         // approved directories only; `workspace_trust` and
         // `allow_trusted_workspace_execution` are overwritten from
@@ -333,11 +375,52 @@ impl CorulixEngine {
             allow_trusted_workspace_execution: self.trusted,
             ..self.host_provider_authority.clone()
         };
+        // Corulix 1.1.0 (ADR 0012): union `defaults.disabled_categories`
+        // with `root`'s own override, if one is attached and applicable --
+        // both layers are monotonic-narrowing in the same direction (a
+        // root override can only add to the disabled set relative to
+        // workspace defaults, never remove), so a plain set union composes
+        // correctly with `EffectiveConfig::derive`'s own unmodified,
+        // narrowing-only `retain` below -- no new merge mode.
+        let repository_hints = self.workspace_config.as_ref().map_or_else(
+            wht_corulix_config::RepositoryHints::default,
+            |workspace_config| {
+                let mut disabled_categories = workspace_config.defaults.disabled_categories.clone();
+                if let Some(root_id) = root
+                    && let Some((_, overrides)) = workspace_config
+                        .root_overrides
+                        .iter()
+                        .find(|(id, _)| *id == root_id)
+                {
+                    disabled_categories.extend(overrides.disabled_categories.iter().copied());
+                }
+                wht_corulix_config::RepositoryHints {
+                    disabled_categories,
+                }
+            },
+        );
         wht_corulix_config::EffectiveConfig::derive(
             &host,
-            &wht_corulix_config::RepositoryHints::default(),
+            &repository_hints,
             &wht_corulix_config::RequestOptions::default(),
         )
+    }
+
+    /// Corulix 1.1.0 (ADR 0012): resolves `root`'s own
+    /// [`wht_corulix_core::WorkspaceRootId`] within this engine's bound
+    /// `WorkspaceContext`, for callers that already hold a resolved
+    /// [`wht_corulix_workspace::WorkspaceRoot`] (typically from
+    /// [`Self::resolve_workspace_root`]) and need the id to pass into
+    /// [`Self::effective_config`]. `None` if, implausibly, `root` is not
+    /// actually one of this context's own member roots (defensive --
+    /// every real caller's `root` came from this same context's own
+    /// resolution, so this should never actually miss).
+    pub(crate) fn root_id_for(
+        &self,
+        root: &wht_corulix_workspace::WorkspaceRoot,
+    ) -> Option<wht_corulix_core::WorkspaceRootId> {
+        self.context()
+            .resolve_root_id_by_canonical_path(root.canonical_path())
     }
 
     /// Returns a redacted description of the workspace safe to hand to an
@@ -688,7 +771,9 @@ impl CorulixEngine {
             })
         });
         if typecheck_build_required {
-            let effective = self.effective_config();
+            // No root selector exists on this operation -- workspace-wide,
+            // per ADR 0012's own "pass None, never a guessed root" rule.
+            let effective = self.effective_config(None);
             let (typecheck_build, linter, test_runner) =
                 live_diagnostics_availability(language, &effective);
             snapshot = snapshot.with_diagnostics_resolution(typecheck_build, linter, test_runner);

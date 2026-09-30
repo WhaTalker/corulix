@@ -66,3 +66,13 @@ vendor/
 /wht_tests/fixtures/python/sample_known_diagnostic.py
 /wht_tests/fixtures/rust/rust_semantic_dependency_smoke/
 /wht_tests/fixtures/rust/rust_semantic_smoke/
+
+# Internal status/audit report -- never part of the public GitHub source
+# tree (see wht_docs/wht_publication_scope.md's "internal status/audit
+# reports unless separately approved for public release" exclusion, and
+# README.md's own public-source-exclusion list). Discovered missing from
+# this file during the G0.5/G0.6 GitHub-publisher dry-run reconciliation
+# pass: without this entry, WhtGitHubPublisher's own git-tracked
+# publication-set derivation would have included this internal engineering
+# risk register in what it reported it "would track" for a real publish.
+/wht_docs/wht_corulix_1_1_0_risk_register.md

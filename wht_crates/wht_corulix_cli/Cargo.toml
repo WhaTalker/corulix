@@ -5,7 +5,7 @@
 [package]
 name = "corulix"
 description = "Official corulix command-line binary"
-version.workspace = true
+version = "1.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -21,10 +21,20 @@ name = "corulix"
 path = "src/main.rs"
 
 [dependencies]
-wht_corulix_core.workspace = true
-wht_corulix_engine.workspace = true
-wht_corulix_mcp.workspace = true
-wht_corulix_workspace.workspace = true
+# Corulix 1.1.0 (ADR 0012, Phase M): this crate consumes 1.1.0-only API
+# from these four (`EffectiveToolSet::canonical_tool_count`,
+# `wht_corulix_config::load_workspace_config`/`workspace_config_json_schema`,
+# `wht_corulix_mcp::instructions`, `wht_corulix_mcp::CorulixMcpServer::with_tool_policy`,
+# `wht_corulix_workspace::confined_read_optional`/`WorkspaceContext::resolve_root_id_by_canonical_path`)
+# -- an explicit `version = "1.1.0"` override here (not the shared
+# `[workspace.dependencies]` entry, deliberately left at `1.0.0` for the
+# unaffected 1.0.0-pinned crates that also depend on some of these) is
+# what makes `cargo publish`'s own resolution refuse a combination that
+# cannot actually compile, rather than a confusing downstream error.
+wht_corulix_core = { path = "../wht_corulix_core", version = "1.1.0" }
+wht_corulix_engine = { path = "../wht_corulix_engine", version = "1.1.0" }
+wht_corulix_mcp = { path = "../wht_corulix_mcp", version = "1.1.0" }
+wht_corulix_workspace = { path = "../wht_corulix_workspace", version = "1.1.0" }
 # F1: this crate is the sole caller of `wht_corulix_config::load_host_config_file`
 # (the real `--host-config <FILE>` loader behind `corulix mcp stdio`) --
 # `wht_corulix_engine` already depends on `wht_corulix_config` for
@@ -36,7 +46,10 @@ wht_corulix_workspace.workspace = true
 # `wht_corulix_config` at all -- no such restriction applies to this CLI
 # binary, which already depends on `wht_corulix_workspace` directly for the
 # same kind of reason).
-wht_corulix_config.workspace = true
+# Corulix 1.1.0 (ADR 0012, Phase M): also uses `load_workspace_config`/
+# `workspace_config_json_schema`, new in 1.1.0 -- see this crate's own
+# 1.1.0 version-floor note above the other four dependency overrides.
+wht_corulix_config = { path = "../wht_corulix_config", version = "1.1.0" }
 # Installation-Contract-V1: this crate's own `mcp stdio` bootstrap is the
 # one legitimate place `FIRST_RUN_RECONCILIATION` runs (`install_profile::ensure_bootstrapped`)
 # -- the same "this layer owns bootstrap, don't route it through Engine's

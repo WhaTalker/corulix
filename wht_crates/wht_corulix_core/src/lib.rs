@@ -40,6 +40,7 @@ mod operation;
 mod provider;
 mod runtime;
 mod session;
+mod tool_policy;
 mod topology;
 mod workspace;
 
@@ -65,6 +66,10 @@ pub use provider::{
 };
 pub use runtime::RuntimeIdentity;
 pub use session::{ChangeSessionId, ChangeSessionStatus, ConnectionId};
+pub use tool_policy::{
+    CANONICAL_MCP_TOOL_NAMES, EffectiveToolSet, MUTATION_FAMILY_MCP_TOOL_NAMES,
+    ToolPolicyValidationError, validate_tool_policy,
+};
 pub use topology::{
     WorkspacePath, WorkspaceRootId, WorkspaceRootSummary, WorkspaceTopologyKind,
     WorkspaceTopologySummary,

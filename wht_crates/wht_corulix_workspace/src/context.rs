@@ -35,6 +35,19 @@ struct MemberRoot {
 #[derive(Debug, Clone)]
 pub struct WorkspaceContext {
     members: Vec<MemberRoot>,
+    /// Corulix 1.1.0 (ADR 0012): the canonicalized, pinned directory
+    /// containing the `.code-workspace` descriptor this context was
+    /// resolved from, if any. `None` for every single-root context.
+    /// Attached only via [`Self::with_descriptor_location`] (an additive
+    /// builder method) -- never a constructor parameter, so
+    /// [`Self::from_roots`]'s own public signature (a published,
+    /// crates.io API this crate must not break) is untouched. Stored as an
+    /// already-pinned [`WorkspaceRoot`] rather than a bare `PathBuf` so the
+    /// descriptor-sibling config file can be read via the exact same
+    /// TOCTOU-safe, symlink-final-safe [`confined_read`] machinery every
+    /// other in-workspace read already uses, instead of a second,
+    /// independently-maintained low-level primitive.
+    descriptor_location: Option<WorkspaceRoot>,
 }
 
 impl WorkspaceContext {
@@ -47,6 +60,7 @@ impl WorkspaceContext {
                 root,
                 display_name,
             }],
+            descriptor_location: None,
         }
     }
 
@@ -97,7 +111,48 @@ impl WorkspaceContext {
                 }
             })
             .collect();
-        Ok(Self { members })
+        Ok(Self {
+            members,
+            descriptor_location: None,
+        })
+    }
+
+    /// Attaches the canonicalized, pinned directory containing the
+    /// `.code-workspace` descriptor this context was resolved from
+    /// (Corulix 1.1.0, ADR 0012). Additive consuming builder -- never
+    /// changes [`Self::from_roots`]'s own signature. The caller
+    /// (`wht_corulix_workspace::resolver::load_descriptor`) is the only
+    /// intended production call site; a test or other constructor that
+    /// never calls this leaves [`Self::descriptor_location`] `None`,
+    /// exactly matching a single-root context's own default.
+    #[must_use]
+    pub fn with_descriptor_location(mut self, location: WorkspaceRoot) -> Self {
+        self.descriptor_location = Some(location);
+        self
+    }
+
+    /// The pinned directory containing the `.code-workspace` descriptor
+    /// this context was resolved from, if any. `None` for every
+    /// single-root context, and for any multi-root context whose caller
+    /// did not opt into [`Self::with_descriptor_location`].
+    #[must_use]
+    pub fn descriptor_location(&self) -> Option<&WorkspaceRoot> {
+        self.descriptor_location.as_ref()
+    }
+
+    /// Resolves `candidate` (an already-canonicalized path) to the
+    /// [`WorkspaceRootId`] of the exactly-one member root it names, if any.
+    /// Never leaks a canonical path back to the caller -- only consumes one
+    /// and returns an opaque id. This is the sole primitive
+    /// `wht_corulix_config`'s workspace-config root-locator binding (ADR
+    /// 0012) may use; it must never independently re-implement
+    /// canonical-path comparison.
+    #[must_use]
+    pub fn resolve_root_id_by_canonical_path(&self, candidate: &Path) -> Option<WorkspaceRootId> {
+        self.members
+            .iter()
+            .find(|member| member.root.canonical_path() == candidate)
+            .map(|member| member.id)
     }
 
     #[must_use]
@@ -246,6 +301,90 @@ mod tests {
         assert_eq!(context.topology(), WorkspaceTopologyKind::SingleRoot);
         assert_eq!(context.root_count(), 1);
         let _ = fs::remove_dir_all(&dir);
+        Ok(())
+    }
+
+    #[test]
+    fn single_root_context_has_no_descriptor_location() -> CorulixResult<()> {
+        let dir = temp_dir("no-descriptor");
+        let root = WorkspaceRoot::open(&dir)?;
+        let context = WorkspaceContext::single_root(root, "solo".to_string());
+        assert!(context.descriptor_location().is_none());
+        let _ = fs::remove_dir_all(&dir);
+        Ok(())
+    }
+
+    #[test]
+    fn from_roots_has_no_descriptor_location_until_attached() -> CorulixResult<()> {
+        let a = temp_dir("nd-a");
+        let b = temp_dir("nd-b");
+        let context = WorkspaceContext::from_roots(vec![
+            (WorkspaceRoot::open(&a)?, "a".to_string()),
+            (WorkspaceRoot::open(&b)?, "b".to_string()),
+        ])?;
+        assert!(context.descriptor_location().is_none());
+        let _ = fs::remove_dir_all(&a);
+        let _ = fs::remove_dir_all(&b);
+        Ok(())
+    }
+
+    #[test]
+    fn with_descriptor_location_attaches_it() -> CorulixResult<()> {
+        let a = temp_dir("wdl-a");
+        let descriptor_dir = temp_dir("wdl-descriptor");
+        let context =
+            WorkspaceContext::from_roots(vec![(WorkspaceRoot::open(&a)?, "a".to_string())])?
+                .with_descriptor_location(WorkspaceRoot::open(&descriptor_dir)?);
+        assert!(context.descriptor_location().is_some());
+        assert_eq!(
+            context
+                .descriptor_location()
+                .map(WorkspaceRoot::canonical_path),
+            Some(WorkspaceRoot::open(&descriptor_dir)?.canonical_path())
+        );
+        let _ = fs::remove_dir_all(&a);
+        let _ = fs::remove_dir_all(&descriptor_dir);
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_root_id_by_canonical_path_matches_the_right_root() -> CorulixResult<()> {
+        let a = temp_dir("ridp-a");
+        let b = temp_dir("ridp-b");
+        let context = WorkspaceContext::from_roots(vec![
+            (WorkspaceRoot::open(&a)?, "a".to_string()),
+            (WorkspaceRoot::open(&b)?, "b".to_string()),
+        ])?;
+        let canonical_a = WorkspaceRoot::open(&a)?.canonical_path().to_path_buf();
+        let canonical_b = WorkspaceRoot::open(&b)?.canonical_path().to_path_buf();
+        assert_eq!(
+            context.resolve_root_id_by_canonical_path(&canonical_a),
+            Some(WorkspaceRootId(0))
+        );
+        assert_eq!(
+            context.resolve_root_id_by_canonical_path(&canonical_b),
+            Some(WorkspaceRootId(1))
+        );
+        let _ = fs::remove_dir_all(&a);
+        let _ = fs::remove_dir_all(&b);
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_root_id_by_canonical_path_returns_none_for_unrelated_path() -> CorulixResult<()> {
+        let a = temp_dir("ridp-unrelated-a");
+        let outside = temp_dir("ridp-unrelated-outside");
+        let context =
+            WorkspaceContext::from_roots(vec![(WorkspaceRoot::open(&a)?, "a".to_string())])?;
+        let canonical_outside = WorkspaceRoot::open(&outside)?
+            .canonical_path()
+            .to_path_buf();
+        assert_eq!(
+            context.resolve_root_id_by_canonical_path(&canonical_outside),
+            None
+        );
+        let _ = fs::remove_dir_all(&a);
+        let _ = fs::remove_dir_all(&outside);
         Ok(())
     }
 

@@ -1,8 +1,8 @@
-# Publication Scope — Corulix 1.0.0
+# Publication Scope — Corulix 1.1.0
 
 ## Authority
 
-The standard public **source** set for Corulix 1.0.0 is the file list in the repository-root `PACKAGE_MANIFEST.txt`. `SHA256SUMS.txt` binds publication-set files to SHA-256 digests; the checksum file intentionally does not checksum itself.
+The standard public **source** set for Corulix 1.1.0 is the file list in the repository-root `PACKAGE_MANIFEST.txt`. `SHA256SUMS.txt` binds publication-set files to SHA-256 digests; the checksum file intentionally does not checksum itself.
 
 The publication set describes source/documentation content. Platform binaries, npm packages, SBOMs, attestations and other release assets are separate artifacts with their own identities.
 
@@ -48,7 +48,7 @@ A root-level upstream checksum capture named `SHASUMS256.txt` is not part of the
 
 ## No-Git publication model
 
-The 1.0.0 source set is content-defined. Local `.git` state, commit IDs, tree IDs and tags are not required source authority. A hosting platform may mirror/distribute the source, but it does not replace the publication manifest/checksum identity.
+The source set is content-defined. Local `.git` state, commit IDs, tree IDs and tags are not required source authority. A hosting platform may mirror/distribute the source, but it does not replace the publication manifest/checksum identity.
 
 ## Publication rule
 

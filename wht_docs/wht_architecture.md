@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the **current Corulix 1.0.0 architecture**. Historical implementation phases and temporary qualification states are intentionally not used as current architecture authority.
+This document describes the **current Corulix 1.1.0 architecture** (unchanged from 1.0.0 except for the additive workspace-configuration/tool-policy layer noted where relevant). Historical implementation phases and temporary qualification states are intentionally not used as current architecture authority.
 
 ## Architectural model
 
@@ -97,7 +97,7 @@ The tooling layer does not make a general OS-sandbox claim. Network/filesystem i
 
 ### MCP
 
-`wht_corulix_mcp` is a transport/presentation adapter. It exposes exactly 14 public tools in 1.0.0 and delegates product behavior to the engine/core layers.
+`wht_corulix_mcp` is a transport/presentation adapter. It exposes exactly 14 public tools (unchanged since 1.0.0, including in 1.1.0) and delegates product behavior to the engine/core layers.
 
 ## Change lifecycle
 
@@ -136,7 +136,7 @@ This prevents a structural parser from being presented as a compiler and prevent
 
 Selected runtimes/providers are provisioned into Corulix-owned application data using pinned identities and cryptographic hashes. Provisioning, ownership, execution leases, and uninstall are managed product concerns; local managed state is not part of the public source publication set.
 
-`.corulix-rust/`, `vendor/`, `target/`, and private `release/` material are therefore not architectural source components of the standard public 1.0.0 source package. See `wht_publication_scope.md`.
+`.corulix-rust/`, `vendor/`, `target/`, and private `release/` material are therefore not architectural source components of the standard public source package. See `wht_publication_scope.md`.
 
 ## Async runtime and cancellation
 
@@ -144,7 +144,7 @@ Corulix uses one async-first runtime model for I/O and external-process orchestr
 
 ## Windows security semantics
 
-Windows 1.0.0 is a supported native release platform. For workspace-bound execution, Corulix uses the strongest safe authority available to the platform implementation and **fails closed** where a safe object/process-root binding cannot be established. A pathname-only fallback is not treated as an equivalent security authority.
+Windows x86_64 is a supported, natively-certified release platform since 1.0.0 (Corulix 1.1.0 additionally completed a full native Windows re-certification). For workspace-bound execution, Corulix uses the strongest safe authority available to the platform implementation and **fails closed** where a safe object/process-root binding cannot be established. A pathname-only fallback is not treated as an equivalent security authority.
 
 This stricter behavior is intentional security policy, not an implementation error.
 

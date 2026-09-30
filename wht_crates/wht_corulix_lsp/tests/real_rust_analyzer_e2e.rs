@@ -19,16 +19,19 @@ use std::error::Error;
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(unix)]
+use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use wht_corulix_config::{EffectiveConfig, HostConfig, RepositoryHints, RequestOptions};
+#[cfg(unix)]
+use wht_corulix_core::Position;
 use wht_corulix_core::{
-    CancellationToken, Position, ProviderAvailability, ProviderCategory, WorkspaceRootId,
+    CancellationToken, ProviderAvailability, ProviderCategory, WorkspaceRootId,
 };
-use wht_corulix_lsp::{
-    DefinitionResult, DiagnosticsResult, LspProviderProfile, LspSession, Readiness,
-    ReferencesResult,
-};
+#[cfg(unix)]
+use wht_corulix_lsp::{DefinitionResult, DiagnosticsResult, Readiness, ReferencesResult};
+use wht_corulix_lsp::{LspProviderProfile, LspSession};
 use wht_corulix_workspace::WorkspaceRoot;
 
 /// Test-only discovery of a real `rust-analyzer` binary, `HOST_ONLY`-style
@@ -43,10 +46,15 @@ use wht_corulix_workspace::WorkspaceRoot;
 /// toolchain's `bin/` directory (`rustup show home`) for the first one
 /// that actually has the binary, and only then falls back to a plain
 /// `PATH` search. Never embeds a specific developer's machine path.
+// P17-W corrective P5: gated per-item, not file-level, alongside every
+// other helper this file's sole Unix-only test (`real_rust_analyzer_full_vertical_e2e`)
+// exclusively uses -- this file's other two tests remain platform-neutral.
+#[cfg(unix)]
 fn real_rust_analyzer_path() -> Option<PathBuf> {
     resolve_real_toolchain_tool("rust-analyzer", "CORULIX_TEST_RUST_ANALYZER")
 }
 
+#[cfg(unix)]
 fn resolve_real_toolchain_tool(bin_name: &str, env_override: &str) -> Option<PathBuf> {
     if let Ok(explicit) = std::env::var(env_override) {
         return Some(PathBuf::from(explicit));
@@ -86,6 +94,7 @@ fn resolve_real_toolchain_tool(bin_name: &str, env_override: &str) -> Option<Pat
         .map(|dir| dir.join(&exe_name))
 }
 
+#[cfg(unix)]
 const READINESS_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug)]
@@ -103,6 +112,7 @@ fn fail(message: impl Into<String>) -> Box<dyn Error> {
     Box::new(TestFailure(message.into()))
 }
 
+#[cfg(unix)]
 fn real_rust_analyzer_available() -> bool {
     real_rust_analyzer_path().is_some_and(|p| p.is_file())
 }
@@ -129,6 +139,7 @@ fn temp_fixture_workspace(label: &str) -> PathBuf {
 /// against a `HOST_ONLY`-configured absolute path -- this is the sole
 /// resolution path this test (and Corulix in general) uses; ambient `PATH`
 /// is never consulted.
+#[cfg(unix)]
 async fn resolve_rust_analyzer(workspace_root: &WorkspaceRoot) -> Option<PathBuf> {
     let host = HostConfig {
         provider_absolute_paths: vec![(
@@ -155,6 +166,22 @@ async fn resolve_rust_analyzer(workspace_root: &WorkspaceRoot) -> Option<PathBuf
     resolution.resolved_path
 }
 
+// Windows note (M09/D96, P17-W corrective P5): `#[cfg(unix)]`-only. This
+// test's own deep proof (NOT_READY_VS_ZERO_REFERENCES, readiness, hover,
+// definition) genuinely requires a live, workspace-bound rust-analyzer
+// session -- `LspSession::spawn` always fails closed on Windows via
+// `ManagedProcess::spawn_with_workspace_root` before any process is
+// spawned (no `fchdir`-equivalent primitive to preserve object-bound cwd
+// across `exec`), the same accepted, `FINAL_CLOSED` M09 contract already
+// on record ("Windows: workspace-bound LSP UNAVAILABLE_FAIL_CLOSED, zero
+// provider spawn"). Unlike a whole-file gate, this file is genuinely
+// mixed-platform: this file's other two tests
+// (`nonexistent_executable_is_a_typed_spawn_failure`,
+// `invalid_provider_path_is_rejected_by_resolver_not_by_lsp`) already pass
+// on native Windows today (both assert a typed *pre-spawn* resolver/typed
+// error, never a live session), so only this one deep-vertical test is
+// gated per-test rather than gating the whole file.
+#[cfg(unix)]
 #[tokio::test]
 async fn real_rust_analyzer_full_vertical_e2e() -> Result<(), Box<dyn Error>> {
     if !real_rust_analyzer_available() {

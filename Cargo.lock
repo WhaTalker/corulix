@@ -284,7 +284,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "corulix"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "clap",
  "rmcp",
@@ -2142,9 +2142,12 @@ dependencies = [
 
 [[package]]
 name = "wht_corulix_config"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
+ "jsonschema",
+ "schemars",
  "serde",
+ "serde_json",
  "tokio",
  "toml",
  "wht_corulix_core",
@@ -2153,7 +2156,7 @@ dependencies = [
 
 [[package]]
 name = "wht_corulix_core"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "schemars",
  "serde",
@@ -2162,7 +2165,7 @@ dependencies = [
 
 [[package]]
 name = "wht_corulix_engine"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "schemars",
  "serde",
@@ -2225,7 +2228,7 @@ dependencies = [
 
 [[package]]
 name = "wht_corulix_mcp"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "axum",
  "jsonschema",
@@ -2328,7 +2331,7 @@ dependencies = [
 
 [[package]]
 name = "wht_corulix_workspace"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "escargot",
  "jsonc-parser",

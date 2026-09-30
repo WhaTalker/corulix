@@ -1,6 +1,6 @@
 # Architecture Boundaries
 
-This document summarizes the **current Corulix 1.0.0 boundary invariants**. Historical phase-by-phase implementation notes are intentionally omitted from the current-facing contract. The exact static checks are enforced by `wht_scripts/wht_verify_architecture.py` and repository validation.
+This document summarizes the **current Corulix 1.1.0 boundary invariants** (unchanged from 1.0.0 except where this document notes a 1.1.0 addition). Historical phase-by-phase implementation notes are intentionally omitted from the current-facing contract. The exact static checks are enforced by `wht_scripts/wht_verify_architecture.py` and repository validation.
 
 ## 1. Protocol-independent Core
 
@@ -92,9 +92,9 @@ Each language has independent authorities for structure, semantics, formatting, 
 
 Current detailed matrix: `wht_language_support.md`.
 
-## 17. Public MCP surface is frozen for 1.0.0
+## 17. Public MCP surface is frozen since 1.0.0, unchanged in 1.1.0
 
-The public 1.0.0 MCP surface contains exactly 14 tools:
+The public MCP surface has contained exactly 14 tools since 1.0.0, unchanged in 1.1.0:
 
 ```text
 abort_change
@@ -117,6 +117,6 @@ Schema/name changes require a future versioned product decision; documentation c
 
 ## 18. Publication boundary
 
-The public source package is defined by `PACKAGE_MANIFEST.txt`. Generated/private/local-state directories such as `.corulix-rust/`, `release/`, `vendor/`, and `target/` are excluded from the standard public 1.0.0 source set.
+The public source package is defined by `PACKAGE_MANIFEST.txt`. Generated/private/local-state directories such as `.corulix-rust/`, `release/`, `vendor/`, and `target/` are excluded from the standard public 1.1.0 source set.
 
 See `wht_publication_scope.md`.

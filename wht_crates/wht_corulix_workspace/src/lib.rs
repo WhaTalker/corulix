@@ -59,7 +59,7 @@ pub use capability_win32::{
 pub use confine::{
     ConfinedPath, DEFAULT_MAX_WALK_DEPTH, DEFAULT_MAX_WALK_ENTRIES, WalkLimits, WorkspaceRoot,
     canonicalize_external_path, confine_target, confined_metadata, confined_read,
-    confined_read_and_process, confined_walk, resolve_confined,
+    confined_read_and_process, confined_read_optional, confined_walk, resolve_confined,
 };
 pub use context::{MAX_WORKSPACE_ROOTS, WorkspaceContext, all_roots_within_boundary};
 pub use descriptor::{DescriptorFolder, WorkspaceDescriptor, parse_descriptor};

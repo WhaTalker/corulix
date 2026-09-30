@@ -30,6 +30,27 @@
 //! environment's well-known toolchain location, this test reports and
 //! exits early rather than substituting a mock.
 
+// Windows note (M09/D96, P17-W corrective P6): `#![cfg(unix)]`-only for
+// this whole file. This is the file's sole test, and its entire proof --
+// every stage from semantic_confirm onward (semantic confirmation,
+// diagnostics, post-audit) -- depends on a real, live, workspace-bound
+// rust-analyzer session existing throughout the governed lifecycle, not
+// merely one narrow assertion. `LspSession::spawn`'s single call site
+// (`wht_corulix_lsp::session.rs`) routes unconditionally through
+// `wht_corulix_tooling::ManagedProcess::spawn_with_workspace_root`, whose
+// `#[cfg(not(unix))]` arm unconditionally returns `Err` before any process
+// is spawned -- the same accepted, `FINAL_CLOSED` M09 contract already on
+// record ("Windows: workspace-bound LSP UNAVAILABLE_FAIL_CLOSED, zero
+// provider spawn"), confirmed via direct production source (P4/P5).
+// `P10_WINDOWS_CONTRACT=UNIX_ONLY_FULL_GOVERNED_LIFECYCLE`: unlike
+// `real_rust_analyzer_e2e.rs` (P5), this file has no separable
+// pre-spawn-only sibling test, so the whole file is gated rather than a
+// per-item subset. P5's host-native manifest/HOME/exe-suffix provisioning
+// corrections remain unchanged and valid -- they simply become dormant on
+// Windows under this gate for now, available for reuse if a future,
+// separately-authorized pass adds real Windows LSP process support.
+#![cfg(unix)]
+
 use std::error::Error;
 use std::fmt;
 use std::fs;
@@ -153,21 +174,71 @@ fn real_toolchain_available() -> bool {
         && real_rustfmt_path().is_some_and(|p| p.is_file())
 }
 
+/// P17-W corrective P5: `std::env::var("HOME")` only errors when the
+/// variable is *absent*, not when it is *present but empty* -- the same
+/// empty-`HOME` defect class already found and fixed in
+/// `real_rust_analyzer_managed_lsp_semantic_cycle_e2e.rs`'s own
+/// `resolve_home_dir` (P4). This test has no platform gate at all, so
+/// unlike that file, it must genuinely resolve a correct absolute path on
+/// Windows too (provisioning below needs one even though the later
+/// `LspSession::spawn` call has its own separate, accepted Windows
+/// fail-closed contract -- see `RUST_ANALYZER_FULL_VERTICAL_CONTRACT`
+/// evidence recorded for `real_rust_analyzer_e2e.rs`). Falls back to
+/// `USERPROFILE` before the prior Unix-only `/root` default.
+fn resolve_home_dir() -> PathBuf {
+    if let Ok(home) = std::env::var("HOME")
+        && !home.is_empty()
+    {
+        return PathBuf::from(home);
+    }
+    #[cfg(windows)]
+    {
+        if let Ok(user_profile) = std::env::var("USERPROFILE")
+            && !user_profile.is_empty()
+        {
+            return PathBuf::from(user_profile);
+        }
+    }
+    PathBuf::from("/root")
+}
+
 fn managed_root() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let home = resolve_home_dir();
     // The same shared cache `real_p11_diagnostics_e2e.rs`/
     // `real_p11_r1_trust_enforcement_e2e.rs` use -- one real provisioned
     // runtime, never a second independent download for this test alone.
-    PathBuf::from(home).join(".cache/corulix-p11-diagnostics-e2e/root")
+    home.join(".cache")
+        .join("corulix-p11-diagnostics-e2e")
+        .join("root")
 }
 
-/// Ensures the real, managed `RUST_SEMANTIC_RUNTIME_LINUX_X64` (cargo/rustc/
-/// clippy, merged -- P11) is provisioned, returning its install directory.
-/// `None` (never a panic) on genuine provisioning failure, so this test can
-/// report `BLOCKED` honestly on an environment without real internet access.
+/// Host-native `rust-semantic-runtime` manifest (P17-W corrective P5): this
+/// test previously hardcoded [`RUST_SEMANTIC_RUNTIME_LINUX_X64`]
+/// unconditionally, so on Windows it always attempted to provision a Linux
+/// ELF runtime -- a genuine `TEST_DEFECT`, not the "no real internet
+/// access" the resulting `BLOCKED_PROVISIONING_FAILED` message speculated.
+/// The real Windows counterpart,
+/// [`wht_corulix_tooling::managed_runtimes::RUST_SEMANTIC_RUNTIME_WINDOWS_X64`],
+/// already exists and is used elsewhere in this same test suite.
+#[cfg(target_os = "windows")]
+fn host_native_rust_semantic_runtime_manifest()
+-> wht_corulix_tooling::provisioning::ManagedComponentManifest {
+    wht_corulix_tooling::managed_runtimes::RUST_SEMANTIC_RUNTIME_WINDOWS_X64
+}
+#[cfg(not(target_os = "windows"))]
+fn host_native_rust_semantic_runtime_manifest()
+-> wht_corulix_tooling::provisioning::ManagedComponentManifest {
+    wht_corulix_tooling::managed_runtimes::RUST_SEMANTIC_RUNTIME_LINUX_X64
+}
+
+/// Ensures the real, managed host-native `rust-semantic-runtime` (cargo/
+/// rustc/clippy, merged -- P11) is provisioned, returning its install
+/// directory. `None` (never a panic) on genuine provisioning failure, so
+/// this test can report `BLOCKED` honestly on an environment without real
+/// internet access.
 async fn ensure_managed_runtime_provisioned() -> Option<PathBuf> {
     let root = managed_root();
-    let manifest = wht_corulix_tooling::managed_runtimes::RUST_SEMANTIC_RUNTIME_LINUX_X64;
+    let manifest = host_native_rust_semantic_runtime_manifest();
     let (state, _) =
         wht_corulix_tooling::provisioning::resolve_owned_managed_component(&root, &manifest);
     if state != wht_corulix_tooling::provisioning::ManagedComponentState::Available
@@ -297,8 +368,12 @@ async fn real_p10_dogfood_change_session_full_governed_lifecycle_e2e() -> Result
             "P10_DOGFOOD_MANAGED_RUNTIME=BLOCKED_PROVISIONING_FAILED (no real internet access?)",
         ));
     };
-    let managed_cargo_path = managed_install_dir.join("bin/cargo");
-    let managed_cargo_clippy_path = managed_install_dir.join("bin/cargo-clippy");
+    let managed_cargo_path = managed_install_dir
+        .join("bin")
+        .join(format!("cargo{}", std::env::consts::EXE_SUFFIX));
+    let managed_cargo_clippy_path = managed_install_dir
+        .join("bin")
+        .join(format!("cargo-clippy{}", std::env::consts::EXE_SUFFIX));
     if !managed_cargo_path.is_file() || !managed_cargo_clippy_path.is_file() {
         return Err(fail(format!(
             "expected the real managed runtime to provide both cargo and cargo-clippy, \

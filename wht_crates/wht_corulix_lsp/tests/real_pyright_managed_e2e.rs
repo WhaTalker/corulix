@@ -25,6 +25,22 @@
 //! exits early with `PYTHON_LSP_E2E_MANAGED=BLOCKED_MANAGED_PROVIDER_NOT_PROVISIONED`
 //! otherwise.
 
+// Windows note (M09/D96): `#![cfg(unix)]`-only for this whole file --
+// every test's `LspSession::spawn` call always routes through
+// `wht_corulix_tooling::ManagedProcess::spawn_with_workspace_root`, which
+// fails closed before any process is spawned on Windows (no
+// `fchdir`-equivalent primitive to preserve object-bound cwd across
+// `exec`) -- the same accepted, `FINAL_CLOSED` M09 contract already on
+// record ("Windows: workspace-bound LSP UNAVAILABLE_FAIL_CLOSED, zero
+// provider spawn"), mirroring `real_p7b_d_shared_node_two_dependents_active_e2e.rs`'s
+// own identical closure. Both tests previously carried their own per-test
+// `#[cfg(unix)]`, which left every shared helper/fixture/constant dead
+// code on non-Unix targets once neither caller was compiled there
+// (P17-W corrective P2); gating the whole file matches this crate's own
+// established convention for the same defect class (see e.g.
+// `real_typescript_7_native_e2e.rs`, `real_ts6_adversarial_e2e.rs`).
+#![cfg(unix)]
+
 use std::error::Error;
 use std::fmt;
 use std::fs;
@@ -145,15 +161,6 @@ async fn resolve_pyright_managed(
         .ok()
 }
 
-// Windows note (M09/D96): `#[cfg(unix)]`-only. This test's `LspSession::
-// spawn` call always routes through `wht_corulix_tooling::ManagedProcess::
-// spawn_with_workspace_root`, which fails closed before any process is
-// spawned on Windows (no `fchdir`-equivalent primitive to preserve
-// object-bound cwd across `exec`) -- the same accepted, `FINAL_CLOSED` M09
-// contract already on record ("Windows: workspace-bound LSP UNAVAILABLE_
-// FAIL_CLOSED, zero provider spawn"), mirroring `real_p7b_d_shared_node_
-// two_dependents_active_e2e.rs`'s own identical closure.
-#[cfg(unix)]
 #[tokio::test]
 async fn real_pyright_managed_full_vertical_e2e_then_dependency_aware_uninstall()
 -> Result<(), Box<dyn Error>> {
@@ -348,11 +355,6 @@ async fn real_pyright_managed_full_vertical_e2e_then_dependency_aware_uninstall(
 /// EXECUTION DISCOVERY + MANAGED PROCESS SHUTDOWN stage must discover and
 /// stop it itself, proven both by the lease reaching `Stopped` and by a
 /// post-uninstall request against this session's own transport failing.
-// Windows note (M09/D96): `#[cfg(unix)]`-only, same reason as this file's
-// sibling test above -- `LspSession::spawn` always fails closed on Windows
-// via `ManagedProcess::spawn_with_workspace_root` before any process is
-// created.
-#[cfg(unix)]
 #[tokio::test]
 async fn real_pyright_managed_active_provider_uninstall_safety_e2e() -> Result<(), Box<dyn Error>> {
     let _lock = real_pyright_session_lock().await;

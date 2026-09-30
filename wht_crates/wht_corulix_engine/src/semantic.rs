@@ -809,7 +809,7 @@ impl CorulixEngine {
         let root = self
             .resolve_workspace_root(None)
             .map_err(|_| ReasonCode::RequiredCapabilityUnavailable)?;
-        let effective = self.effective_config();
+        let effective = self.effective_config(self.root_id_for(&root));
         let launch =
             wht_corulix_lsp::profile::resolve_launch_at(&profile, &effective, &root, managed_root)
                 .await
@@ -873,7 +873,7 @@ impl CorulixEngine {
         let root = self
             .resolve_workspace_root(None)
             .map_err(|_| ReasonCode::RequiredCapabilityUnavailable)?;
-        let effective = self.effective_config();
+        let effective = self.effective_config(self.root_id_for(&root));
         // M03 managed-provider-readiness fix: this engine previously called
         // the unmanaged `pyright()` profile (`managed_component: None`),
         // which can only ever resolve `HOST_ONLY`/system, and the default
@@ -988,7 +988,7 @@ impl CorulixEngine {
         let root = self
             .resolve_workspace_root(None)
             .map_err(|_| ReasonCode::RequiredCapabilityUnavailable)?;
-        let effective = self.effective_config();
+        let effective = self.effective_config(self.root_id_for(&root));
         // M03 managed-provider-readiness fix (owner-authorized Go
         // reconciliation): `gopls_managed()`'s Go-semantic-runtime
         // resolution now carries the same managed-first-then-`HOST_ONLY`
@@ -1135,7 +1135,7 @@ impl CorulixEngine {
         let root = self
             .resolve_workspace_root(None)
             .map_err(|_| ReasonCode::RequiredCapabilityUnavailable)?;
-        let effective = self.effective_config();
+        let effective = self.effective_config(self.root_id_for(&root));
         let profile = wht_corulix_lsp::profile::LspProviderProfile::rust_analyzer_managed();
         let launch =
             wht_corulix_lsp::profile::resolve_launch_at(&profile, &effective, &root, managed_root)
@@ -1341,7 +1341,7 @@ impl CorulixEngine {
                     let cancellation = wht_corulix_core::CancellationToken::new();
                     real_go_provider_resolutions(
                         managed_root,
-                        &self.effective_config(),
+                        &self.effective_config(self.root_id_for(&root)),
                         &root,
                         &cancellation,
                     )
@@ -1362,7 +1362,7 @@ impl CorulixEngine {
                     let cancellation = wht_corulix_core::CancellationToken::new();
                     real_python_provider_resolutions(
                         managed_root,
-                        &self.effective_config(),
+                        &self.effective_config(self.root_id_for(&root)),
                         &root,
                         &cancellation,
                     )
@@ -1647,7 +1647,7 @@ mod tests {
         };
         let engine = CorulixEngine::open_with_host_config(context, false, smuggled);
         assert!(
-            !engine.effective_config().is_execution_class_allowed(
+            !engine.effective_config(None).is_execution_class_allowed(
                 wht_corulix_core::ExecutionClass::TrustedWorkspaceExecution
             ),
             "a provider-authority HostConfig must not grant trusted workspace execution"
