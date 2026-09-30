@@ -1,6 +1,6 @@
 
 583a3e4b0ecf1c08bd11f55c2c128f0dd892546595bcb9c3993897f76bc27f6f  ./.github/CODEOWNERS
-093dc5e8f81ef195ba83e702946c45a9510888aa5bdc7800b36817d06ae7fe0b  ./.github/workflows/ci.yml
+46a4ccecffbc8f96327b2b2c8c10a14a29e0164bddba0dbf204604d4d01bed5e  ./.github/workflows/ci.yml
 1f791a677ed321fcfe494a1cda6ee9a9c41f2b1fae1d891b2f063095d36afe41  ./.gitignore
 5a12c1694ebe1c44318238c814f3d9b069e1b2978522e15feae9bd14b5c4d079  ./AGENTS.md
 2b7a2694d5f9b3584deb3b50028c050ef0fd5e3109b068a5b8e4cedd9cad6ef0  ./CHANGELOG.md

@@ -83,7 +83,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          expected="1.0.0"
+          expected="1.1.0"
           actual="$(cat VERSION)"
           if [ "$actual" != "$expected" ]; then
             echo "VERSION file ($actual) does not match the pinned release version ($expected)" >&2
@@ -117,7 +117,7 @@ jobs:
             "schemaVersion": 1,
             "repository": "WhaTalker/corulix",
             "sourceCommit": "${{ github.sha }}",
-            "sourceVersion": "1.0.0",
+            "sourceVersion": "1.1.0",
             "npmPlatformPackage": "${{ matrix.platform_package }}",
             "rustTarget": "${{ matrix.rust_target }}",
             "runnerOS": "${{ runner.os }}",
