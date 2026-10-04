@@ -10,7 +10,7 @@
 //!
 //! Generated content is advisory documentation (Architecture: this crate's
 //! own `capability_notes.rs` anti-coaching discipline applies here too --
-//! see [`render_agents_body`]) and is never itself deserialized back into
+//! see `render_agents_body`) and is never itself deserialized back into
 //! runtime security authority by any Corulix code path.
 
 use wht_corulix_core::{CANONICAL_MCP_TOOL_NAMES, ContentHash, EffectiveToolSet};
