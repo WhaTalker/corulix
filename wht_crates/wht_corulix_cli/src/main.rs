@@ -490,7 +490,7 @@ const MAX_INSTRUCTIONS_FILE_BYTES: u64 = 256 * 1024;
 /// Corulix 1.1.0 (ADR 0012, Phase I): `corulix instructions generate`.
 /// Default mode prints to stdout and performs no filesystem I/O at all.
 /// `--check`/`--write` both resolve the same canonical target
-/// [`wht_corulix_config::workspace_config`]'s own loader uses for
+/// `wht_corulix_config::workspace_config`'s own loader uses for
 /// `WhaTalker_Corulix_JSON_Config.json` (beside a multi-root descriptor, or
 /// directly inside a single root) -- reusing that exact resolution, not a
 /// second, independently-derived one.

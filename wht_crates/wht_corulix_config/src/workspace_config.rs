@@ -1244,7 +1244,7 @@ mod tests {
 /// the single shared [`wht_corulix_core::CANONICAL_MCP_TOOL_NAMES`]
 /// catalog -- never a second, hand-maintained list -- so it can never
 /// silently drift from the real semantic validator
-/// ([`schema_tool_name_enum_matches_canonical_catalog`] proves this
+/// (`schema_tool_name_enum_matches_canonical_catalog` proves this
 /// exactly).
 ///
 /// This schema documents shape-level constraints only: root-selector
@@ -1268,7 +1268,7 @@ pub fn workspace_config_json_schema() -> serde_json::Value {
 /// (confirmed by direct inspection of a real generated schema this
 /// session, not assumed) -- and is a silent no-op if that path is ever
 /// absent (a future `schemars` version changing its own `$ref`/inlining
-/// strategy must never panic this function; [`schema_tool_name_enum_matches_canonical_catalog`]
+/// strategy must never panic this function; `schema_tool_name_enum_matches_canonical_catalog`
 /// is the real proof this injection still lands correctly).
 fn inject_tool_name_enum(value: &mut serde_json::Value) {
     let enum_values: Vec<serde_json::Value> = wht_corulix_core::CANONICAL_MCP_TOOL_NAMES

@@ -156,13 +156,13 @@ impl CorulixMcpServer {
 
     /// Corulix 1.1.0 (ADR 0012): attaches an already-validated tool
     /// exposure policy to this server. Additive consuming builder --
-    /// mirrors [`Self::new_with_registry`]'s own fail-closed-at-startup
+    /// mirrors `Self::new_with_registry`'s own fail-closed-at-startup
     /// pattern exactly (a validation failure here means no `Self` value is
     /// ever produced, so no `#[tool]` handler -- every one of which
     /// requires `&self` -- can ever run against an invalid policy) and
     /// never changes [`Self::new`]'s own public signature (a published,
     /// crates.io API this crate must not break). Absent (no call to this
-    /// method), [`Self::tool_policy`] stays
+    /// method), `Self::tool_policy` stays
     /// [`wht_corulix_core::EffectiveToolSet::all_enabled`] -- Corulix
     /// 1.0.0's exact behavior, unaffected.
     pub fn with_tool_policy(
@@ -997,7 +997,7 @@ impl ServerHandler for CorulixMcpServer {
     /// Corulix 1.1.0 (ADR 0012): the **sole** production insertion point
     /// for tool-exposure policy at the dispatch boundary. Hand-written
     /// (not `#[tool_handler]`-generated) so it can call
-    /// [`CorulixMcpServer::effective_tool_router`] instead of the bare
+    /// `CorulixMcpServer::effective_tool_router` instead of the bare
     /// `Self::tool_router()` the macro's own default expansion would use --
     /// otherwise identical, byte-for-byte, to that generated code (compare
     /// `rmcp-macros`' `tool_handler::tool_handler`'s own `call_tool`
@@ -1012,7 +1012,7 @@ impl ServerHandler for CorulixMcpServer {
     }
 
     /// As [`Self::call_tool`]: hand-written so discovery reflects
-    /// [`CorulixMcpServer::effective_tool_router`] rather than the bare
+    /// `CorulixMcpServer::effective_tool_router` rather than the bare
     /// compile-time-declared router -- a policy-disabled tool must be
     /// **invisible** here, not merely rejected on call. Otherwise
     /// byte-for-byte identical to `rmcp-macros`' own `list_tools`
@@ -1039,7 +1039,7 @@ impl ServerHandler for CorulixMcpServer {
     /// policy-disabled tool's definition is never returned through this
     /// path either (`ToolRouter::get` already returns `None` for a
     /// disabled name -- this override only routes it through
-    /// [`CorulixMcpServer::effective_tool_router`] instead of the bare
+    /// `CorulixMcpServer::effective_tool_router` instead of the bare
     /// static router).
     fn get_tool(&self, name: &str) -> Option<rmcp::model::Tool> {
         self.effective_tool_router().get(name).cloned()
@@ -1058,7 +1058,7 @@ impl ServerHandler for CorulixMcpServer {
 /// what makes `corulix mcp stdio` and `corulix config validate`/`inspect`
 /// provably apply the exact same effective policy: the caller (`wht_corulix_cli::main::run_mcp_stdio`)
 /// resolves the workspace's own `WhaTalker_Corulix_JSON_Config.json` via the
-/// same [`wht_corulix_config::load_workspace_config`] both surfaces share,
+/// same `wht_corulix_config::load_workspace_config` both surfaces share,
 /// then constructs the server from that result before ever reaching here.
 pub async fn serve_stdio(server: CorulixMcpServer) -> Result<(), Box<dyn std::error::Error>> {
     let service = server.serve(stdio()).await?;
